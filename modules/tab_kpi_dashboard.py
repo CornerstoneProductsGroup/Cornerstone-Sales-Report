@@ -129,6 +129,86 @@ def _best_week_stats(df: pd.DataFrame, dim: str | None = None, key: str | None =
     return (best_label, best_sales, best_units, _calc_asp(best_sales, best_units))
 
 
+def _metric_compare_bar_html(
+    *,
+    metric_label: str,
+    current_label: str,
+    compare_label: str,
+    current_value: float,
+    compare_value: float,
+    mode: str,
+) -> str:
+    max_val = max(abs(float(current_value)), abs(float(compare_value)), 1.0)
+    current_pct = (abs(float(current_value)) / max_val) * 100.0
+    compare_pct = (abs(float(compare_value)) / max_val) * 100.0
+
+    return (
+        "<div class='kpi-bar-card'>"
+        f"<div class='kpi-bar-title'>{metric_label}</div>"
+        "<div class='kpi-bar-row'>"
+        f"<div class='kpi-bar-row-label'>{current_label}</div>"
+        f"<div class='kpi-bar-row-value'>{_fmt_value(current_value, mode)}</div>"
+        "</div>"
+        "<div class='kpi-bar-track'>"
+        f"<div class='kpi-bar-fill kpi-bar-fill-current' style='width:{current_pct:,.1f}%;'></div>"
+        "</div>"
+        "<div class='kpi-bar-row' style='margin-top:10px;'>"
+        f"<div class='kpi-bar-row-label'>{compare_label}</div>"
+        f"<div class='kpi-bar-row-value'>{_fmt_value(compare_value, mode)}</div>"
+        "</div>"
+        "<div class='kpi-bar-track'>"
+        f"<div class='kpi-bar-fill kpi-bar-fill-compare' style='width:{compare_pct:,.1f}%;'></div>"
+        "</div>"
+        "</div>"
+    )
+
+
+def _render_top_metric_compare_bars(
+    *,
+    current_label: str,
+    compare_label: str,
+    current_sales: float,
+    compare_sales: float,
+    current_units: float,
+    compare_units: float,
+):
+    current_asp = _calc_asp(current_sales, current_units)
+    compare_asp = _calc_asp(compare_sales, compare_units)
+
+    sales_html = _metric_compare_bar_html(
+        metric_label="Total Sales",
+        current_label=current_label,
+        compare_label=compare_label,
+        current_value=current_sales,
+        compare_value=compare_sales,
+        mode="money",
+    )
+    units_html = _metric_compare_bar_html(
+        metric_label="Units",
+        current_label=current_label,
+        compare_label=compare_label,
+        current_value=current_units,
+        compare_value=compare_units,
+        mode="int",
+    )
+    asp_html = _metric_compare_bar_html(
+        metric_label="ASP",
+        current_label=current_label,
+        compare_label=compare_label,
+        current_value=current_asp,
+        compare_value=compare_asp,
+        mode="money",
+    )
+
+    col1, col2, col3 = st.columns(3, gap="small")
+    with col1:
+        st.markdown(sales_html, unsafe_allow_html=True)
+    with col2:
+        st.markdown(units_html, unsafe_allow_html=True)
+    with col3:
+        st.markdown(asp_html, unsafe_allow_html=True)
+
+
 
 # New header with three centered titles above each card
 def _render_split_header(current_label: str, diff_label: str, compare_label: str):
@@ -510,12 +590,19 @@ def render(ctx: dict):
         .kpi-metric-block{margin-bottom:14px;}
         .kpi-metric-block:last-child{margin-bottom:0;}
         .kpi-center-line{width:100%;background:rgba(20,20,20,0.82);border-radius:0;}
+        .kpi-bar-card{border:2px solid rgba(128,128,128,0.35);border-radius:10px;padding:12px 12px 10px 12px;background:var(--secondary-background-color);margin-bottom:10px;}
+        .kpi-bar-title{font-size:12px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;opacity:0.78;margin-bottom:8px;}
+        .kpi-bar-row{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+        .kpi-bar-row-label{font-size:11px;font-weight:800;text-transform:uppercase;opacity:0.70;white-space:nowrap;}
+        .kpi-bar-row-value{font-size:13px;font-weight:800;white-space:nowrap;}
+        .kpi-bar-track{width:100%;height:12px;border-radius:999px;background:rgba(120,120,120,0.20);overflow:hidden;margin-top:4px;}
+        .kpi-bar-fill{height:100%;border-radius:999px;}
+        .kpi-bar-fill-current{background:linear-gradient(90deg,#1d5fbf 0%,#2e7ae5 100%);}
+        .kpi-bar-fill-compare{background:linear-gradient(90deg,#60656d 0%,#8a9099 100%);}
         </style>
         """,
         unsafe_allow_html=True,
     )
-
-    _render_split_header(a_lbl, "Difference", b_lbl)
 
     total_sales_a = float(dfA["Sales"].sum()) if "Sales" in dfA.columns else 0.0
     total_units_a = float(dfA["Units"].sum()) if "Units" in dfA.columns else 0.0
@@ -524,26 +611,38 @@ def render(ctx: dict):
     best_a_lbl, best_a_sales, best_a_units, _ = _best_week_stats(dfA)
     best_b_lbl, best_b_sales, best_b_units, _ = _best_week_stats(dfB)
 
-    _render_split_cards(
-        left_title="Period Total",
-        right_title="Period Total",
-        left_sales=total_sales_a,
-        left_units=total_units_a,
-        right_sales=total_sales_b,
-        right_units=total_units_b,
-        left_ref_sales=total_sales_b,
-        left_ref_units=total_units_b,
-        right_ref_sales=total_sales_a,
-        right_ref_units=total_units_a,
-        left_baseline=b_lbl,
-        right_baseline=a_lbl,
-        left_best_week_label=best_a_lbl,
-        left_best_week_sales=best_a_sales,
-        left_best_week_units=best_a_units,
-        right_best_week_label=best_b_lbl,
-        right_best_week_sales=best_b_sales,
-        right_best_week_units=best_b_units,
-    )
+    left_area, right_area = st.columns([1.25, 1.75], gap="large")
+    with left_area:
+        _render_top_metric_compare_bars(
+            current_label=a_lbl,
+            compare_label=b_lbl,
+            current_sales=total_sales_a,
+            compare_sales=total_sales_b,
+            current_units=total_units_a,
+            compare_units=total_units_b,
+        )
+    with right_area:
+        _render_split_header(a_lbl, "Difference", b_lbl)
+        _render_split_cards(
+            left_title="Period Total",
+            right_title="Period Total",
+            left_sales=total_sales_a,
+            left_units=total_units_a,
+            right_sales=total_sales_b,
+            right_units=total_units_b,
+            left_ref_sales=total_sales_b,
+            left_ref_units=total_units_b,
+            right_ref_sales=total_sales_a,
+            right_ref_units=total_units_a,
+            left_baseline=b_lbl,
+            right_baseline=a_lbl,
+            left_best_week_label=best_a_lbl,
+            left_best_week_sales=best_a_sales,
+            left_best_week_units=best_a_units,
+            right_best_week_label=best_b_lbl,
+            right_best_week_sales=best_b_sales,
+            right_best_week_units=best_b_units,
+        )
 
     retailers_a = _rollup_by_dim(dfA, "Retailer")
     retailers_b = _rollup_by_dim(dfB, "Retailer")

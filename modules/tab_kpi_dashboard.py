@@ -252,6 +252,27 @@ def _render_section_summary_box(
     else:
         leader = "Tie"
 
+    units_pct = (units_diff / float(compare_units) * 100.0) if float(compare_units) != 0 else 0.0
+    asp_pct = (asp_diff / float(compare_asp) * 100.0) if float(compare_asp) != 0 else 0.0
+
+    if abs(units_pct) >= abs(asp_pct):
+        primary_driver = "Units"
+        primary_dir = "up" if units_diff > 0 else ("down" if units_diff < 0 else "flat")
+    else:
+        primary_driver = "ASP"
+        primary_dir = "up" if asp_diff > 0 else ("down" if asp_diff < 0 else "flat")
+
+    if sales_diff > 0:
+        sales_reason = "Sales improved versus compare period."
+    elif sales_diff < 0:
+        sales_reason = "Sales declined versus compare period."
+    else:
+        sales_reason = "Sales were flat versus compare period."
+
+    units_reason = f"Units moved {units_diff:,.0f} ({units_pct:+.1f}%)."
+    asp_reason = f"ASP moved {money(asp_diff)} ({asp_pct:+.1f}%)."
+    driver_reason = f"Primary driver appears to be {primary_driver} ({primary_dir})."
+
     summary_html = (
         "<div class='kpi-side-summary'>"
         f"<div class='kpi-side-summary-title'>{summary_title}</div>"
@@ -261,6 +282,11 @@ def _render_section_summary_box(
         f"<div class='kpi-side-summary-line'>Units Δ: {_fmt_value(units_diff, 'int')}</div>"
         f"<div class='kpi-side-summary-line'>ASP Δ: {_fmt_value(asp_diff, 'money')}</div>"
         f"<div class='kpi-side-summary-line'><strong>Leader:</strong> {leader}</div>"
+        "<div class='kpi-side-summary-reasons-title'>Reasons For Change</div>"
+        f"<div class='kpi-side-summary-reason'>- {sales_reason}</div>"
+        f"<div class='kpi-side-summary-reason'>- {units_reason}</div>"
+        f"<div class='kpi-side-summary-reason'>- {asp_reason}</div>"
+        f"<div class='kpi-side-summary-reason'>- {driver_reason}</div>"
         "</div>"
     )
     st.markdown(summary_html, unsafe_allow_html=True)
@@ -316,8 +342,8 @@ def _render_split_cards_with_bars(
 
 
 def _render_right_aligned_section_title(title: str, subtitle: str | None = None):
-    _, middle_area, _ = st.columns([1.0, 2.2, 0.85], gap="medium")
-    with middle_area:
+    left_area, _, _ = st.columns([1.0, 2.2, 0.85], gap="medium")
+    with left_area:
         st.markdown(f"<h3 style='text-align:center;margin:18px 0 8px 0;'>{title}</h3>", unsafe_allow_html=True)
         if subtitle:
             st.markdown(f"<div class='kpi-dim-subtitle'>{subtitle}</div>", unsafe_allow_html=True)
@@ -752,6 +778,8 @@ def render(ctx: dict):
         .kpi-side-summary-title{font-size:11px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;opacity:0.80;margin-bottom:6px;}
         .kpi-side-summary-line{font-size:12px;line-height:1.35;margin-bottom:3px;}
         .kpi-side-summary-line:last-child{margin-bottom:0;}
+        .kpi-side-summary-reasons-title{font-size:11px;font-weight:900;letter-spacing:0.03em;text-transform:uppercase;opacity:0.78;margin-top:8px;margin-bottom:4px;}
+        .kpi-side-summary-reason{font-size:11px;line-height:1.3;margin-bottom:2px;opacity:0.9;}
         </style>
         """,
         unsafe_allow_html=True,

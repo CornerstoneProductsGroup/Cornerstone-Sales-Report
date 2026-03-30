@@ -605,6 +605,7 @@ def render(ctx: dict):
         .kpi-bar-fill-high{background:linear-gradient(90deg,#2e7d32 0%,#4caf50 100%);}
         .kpi-bar-fill-low{background:linear-gradient(90deg,#c62828 0%,#ef5350 100%);}
         .kpi-bar-fill-neutral{background:linear-gradient(90deg,#60656d 0%,#8a9099 100%);}
+        .kpi-right-offset{height:28px;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -628,6 +629,7 @@ def render(ctx: dict):
             compare_units=total_units_b,
         )
     with right_area:
+        st.markdown("<div class='kpi-right-offset'></div>", unsafe_allow_html=True)
         _render_split_header(a_lbl, "Difference", b_lbl)
         _render_split_cards(
             left_title="Period Total",

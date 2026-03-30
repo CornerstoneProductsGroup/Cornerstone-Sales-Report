@@ -161,7 +161,7 @@ def _metric_compare_bar_html(
         "<div class='kpi-bar-track'>"
         f"<div class='kpi-bar-fill {current_fill_class}' style='width:{current_pct:,.1f}%;'></div>"
         "</div>"
-        "<div class='kpi-bar-row' style='margin-top:10px;'>"
+        "<div class='kpi-bar-row' style='margin-top:6px;'>"
         f"<div class='kpi-bar-row-label'>{compare_label}</div>"
         f"<div class='kpi-bar-row-value'>{_fmt_value(compare_value, mode)}</div>"
         "</div>"
@@ -595,12 +595,12 @@ def render(ctx: dict):
         .kpi-metric-block{margin-bottom:14px;}
         .kpi-metric-block:last-child{margin-bottom:0;}
         .kpi-center-line{width:100%;background:rgba(20,20,20,0.82);border-radius:0;}
-        .kpi-bar-card{border:2px solid rgba(128,128,128,0.35);border-radius:10px;padding:12px 12px 10px 12px;background:var(--secondary-background-color);margin-bottom:10px;}
-        .kpi-bar-title{font-size:12px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;opacity:0.78;margin-bottom:8px;}
+        .kpi-bar-card{border:2px solid rgba(128,128,128,0.35);border-radius:10px;padding:8px 10px 7px 10px;background:var(--secondary-background-color);margin-bottom:6px;}
+        .kpi-bar-title{font-size:11px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;opacity:0.78;margin-bottom:5px;}
         .kpi-bar-row{display:flex;justify-content:space-between;align-items:center;gap:10px;}
-        .kpi-bar-row-label{font-size:11px;font-weight:800;text-transform:uppercase;opacity:0.70;white-space:nowrap;}
-        .kpi-bar-row-value{font-size:13px;font-weight:800;white-space:nowrap;}
-        .kpi-bar-track{width:100%;height:12px;border-radius:999px;background:rgba(120,120,120,0.20);overflow:hidden;margin-top:4px;}
+        .kpi-bar-row-label{font-size:10px;font-weight:800;text-transform:uppercase;opacity:0.70;white-space:nowrap;}
+        .kpi-bar-row-value{font-size:12px;font-weight:800;white-space:nowrap;}
+        .kpi-bar-track{width:100%;height:9px;border-radius:999px;background:rgba(120,120,120,0.20);overflow:hidden;margin-top:3px;}
         .kpi-bar-fill{height:100%;border-radius:999px;}
         .kpi-bar-fill-high{background:linear-gradient(90deg,#2e7d32 0%,#4caf50 100%);}
         .kpi-bar-fill-low{background:linear-gradient(90deg,#c62828 0%,#ef5350 100%);}

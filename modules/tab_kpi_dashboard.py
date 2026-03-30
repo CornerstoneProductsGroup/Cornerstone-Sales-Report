@@ -141,6 +141,15 @@ def _metric_compare_bar_html(
     max_val = max(abs(float(current_value)), abs(float(compare_value)), 1.0)
     current_pct = (abs(float(current_value)) / max_val) * 100.0
     compare_pct = (abs(float(compare_value)) / max_val) * 100.0
+    if float(current_value) > float(compare_value):
+        current_fill_class = "kpi-bar-fill-high"
+        compare_fill_class = "kpi-bar-fill-low"
+    elif float(current_value) < float(compare_value):
+        current_fill_class = "kpi-bar-fill-low"
+        compare_fill_class = "kpi-bar-fill-high"
+    else:
+        current_fill_class = "kpi-bar-fill-neutral"
+        compare_fill_class = "kpi-bar-fill-neutral"
 
     return (
         "<div class='kpi-bar-card'>"
@@ -150,14 +159,14 @@ def _metric_compare_bar_html(
         f"<div class='kpi-bar-row-value'>{_fmt_value(current_value, mode)}</div>"
         "</div>"
         "<div class='kpi-bar-track'>"
-        f"<div class='kpi-bar-fill kpi-bar-fill-current' style='width:{current_pct:,.1f}%;'></div>"
+        f"<div class='kpi-bar-fill {current_fill_class}' style='width:{current_pct:,.1f}%;'></div>"
         "</div>"
         "<div class='kpi-bar-row' style='margin-top:10px;'>"
         f"<div class='kpi-bar-row-label'>{compare_label}</div>"
         f"<div class='kpi-bar-row-value'>{_fmt_value(compare_value, mode)}</div>"
         "</div>"
         "<div class='kpi-bar-track'>"
-        f"<div class='kpi-bar-fill kpi-bar-fill-compare' style='width:{compare_pct:,.1f}%;'></div>"
+        f"<div class='kpi-bar-fill {compare_fill_class}' style='width:{compare_pct:,.1f}%;'></div>"
         "</div>"
         "</div>"
     )
@@ -200,13 +209,9 @@ def _render_top_metric_compare_bars(
         mode="money",
     )
 
-    col1, col2, col3 = st.columns(3, gap="small")
-    with col1:
-        st.markdown(sales_html, unsafe_allow_html=True)
-    with col2:
-        st.markdown(units_html, unsafe_allow_html=True)
-    with col3:
-        st.markdown(asp_html, unsafe_allow_html=True)
+    st.markdown(sales_html, unsafe_allow_html=True)
+    st.markdown(units_html, unsafe_allow_html=True)
+    st.markdown(asp_html, unsafe_allow_html=True)
 
 
 
@@ -597,8 +602,9 @@ def render(ctx: dict):
         .kpi-bar-row-value{font-size:13px;font-weight:800;white-space:nowrap;}
         .kpi-bar-track{width:100%;height:12px;border-radius:999px;background:rgba(120,120,120,0.20);overflow:hidden;margin-top:4px;}
         .kpi-bar-fill{height:100%;border-radius:999px;}
-        .kpi-bar-fill-current{background:linear-gradient(90deg,#1d5fbf 0%,#2e7ae5 100%);}
-        .kpi-bar-fill-compare{background:linear-gradient(90deg,#60656d 0%,#8a9099 100%);}
+        .kpi-bar-fill-high{background:linear-gradient(90deg,#2e7d32 0%,#4caf50 100%);}
+        .kpi-bar-fill-low{background:linear-gradient(90deg,#c62828 0%,#ef5350 100%);}
+        .kpi-bar-fill-neutral{background:linear-gradient(90deg,#60656d 0%,#8a9099 100%);}
         </style>
         """,
         unsafe_allow_html=True,

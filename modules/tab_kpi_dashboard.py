@@ -228,6 +228,44 @@ def _render_top_metric_compare_bars(
     st.markdown(asp_html, unsafe_allow_html=True)
 
 
+def _render_section_summary_box(
+    *,
+    summary_title: str,
+    current_label: str,
+    compare_label: str,
+    current_sales: float,
+    compare_sales: float,
+    current_units: float,
+    compare_units: float,
+):
+    current_asp = _calc_asp(current_sales, current_units)
+    compare_asp = _calc_asp(compare_sales, compare_units)
+
+    sales_diff = float(current_sales) - float(compare_sales)
+    units_diff = float(current_units) - float(compare_units)
+    asp_diff = float(current_asp) - float(compare_asp)
+
+    if float(current_sales) > float(compare_sales):
+        leader = current_label
+    elif float(current_sales) < float(compare_sales):
+        leader = compare_label
+    else:
+        leader = "Tie"
+
+    summary_html = (
+        "<div class='kpi-side-summary'>"
+        f"<div class='kpi-side-summary-title'>{summary_title}</div>"
+        f"<div class='kpi-side-summary-line'><strong>{current_label}</strong>: {money(current_sales)} | {current_units:,.0f}</div>"
+        f"<div class='kpi-side-summary-line'><strong>{compare_label}</strong>: {money(compare_sales)} | {compare_units:,.0f}</div>"
+        f"<div class='kpi-side-summary-line'>Sales Δ: {_fmt_value(sales_diff, 'money')}</div>"
+        f"<div class='kpi-side-summary-line'>Units Δ: {_fmt_value(units_diff, 'int')}</div>"
+        f"<div class='kpi-side-summary-line'>ASP Δ: {_fmt_value(asp_diff, 'money')}</div>"
+        f"<div class='kpi-side-summary-line'><strong>Leader:</strong> {leader}</div>"
+        "</div>"
+    )
+    st.markdown(summary_html, unsafe_allow_html=True)
+
+
 def _render_split_cards_with_bars(
     *,
     current_label: str,
@@ -240,9 +278,13 @@ def _render_split_cards_with_bars(
     bar_card_title_prefix: str | None = None,
     bar_current_label: str | None = None,
     bar_compare_label: str | None = None,
+    summary_title: str | None = None,
+    render_header: bool = False,
+    header_current_label: str | None = None,
+    header_compare_label: str | None = None,
     split_card_kwargs: dict,
 ):
-    left_area, right_area = st.columns([1.05, 1.55], gap="large")
+    left_area, middle_area, right_area = st.columns([1.0, 2.2, 0.85], gap="medium")
     with left_area:
         if left_offset_class:
             st.markdown(f"<div class='{left_offset_class}'></div>", unsafe_allow_html=True)
@@ -257,13 +299,25 @@ def _render_split_cards_with_bars(
             current_line_label=bar_current_label,
             compare_line_label=bar_compare_label,
         )
-    with right_area:
+    with middle_area:
+        if render_header:
+            _render_split_header(header_current_label or current_label, "Difference", header_compare_label or compare_label)
         _render_split_cards(**split_card_kwargs)
+    with right_area:
+        _render_section_summary_box(
+            summary_title=summary_title or split_card_kwargs.get("left_title", "Summary"),
+            current_label=bar_current_label or current_label,
+            compare_label=bar_compare_label or compare_label,
+            current_sales=current_sales,
+            compare_sales=compare_sales,
+            current_units=current_units,
+            compare_units=compare_units,
+        )
 
 
 def _render_right_aligned_section_title(title: str, subtitle: str | None = None):
-    _, right_area = st.columns([1.05, 1.55], gap="large")
-    with right_area:
+    _, middle_area, _ = st.columns([1.0, 2.2, 0.85], gap="medium")
+    with middle_area:
         st.markdown(f"<h3 style='text-align:center;margin:18px 0 8px 0;'>{title}</h3>", unsafe_allow_html=True)
         if subtitle:
             st.markdown(f"<div class='kpi-dim-subtitle'>{subtitle}</div>", unsafe_allow_html=True)
@@ -571,6 +625,7 @@ def _render_dimension_section(
             bar_card_title_prefix=f"{dim} #{idx + 1}: {row_name}",
             bar_current_label="Current",
             bar_compare_label="Compare",
+            summary_title=f"{section_title} #{idx + 1}",
             split_card_kwargs={
                 "left_title": f"{dim} #{idx + 1}",
                 "right_title": f"{dim} #{idx + 1}",
@@ -622,6 +677,7 @@ def _render_dimension_section(
         bar_card_title_prefix=f"{section_title} Total",
         bar_current_label="Current",
         bar_compare_label="Compare",
+        summary_title=f"{section_title} Total",
         split_card_kwargs={
             "left_title": f"{section_title} Total",
             "right_title": f"{section_title} Total",
@@ -667,9 +723,9 @@ def render(ctx: dict):
         .kpi-mini-value{font-size:28px; font-weight:800; line-height:1.18; white-space:nowrap;}
         .kpi-group-card{padding:12px 16px !important; border-radius:10px !important; margin-bottom:6px; display:inline-block !important; width:auto !important; min-width:0 !important;}
         .kpi-group-title{font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:0.05em; opacity:0.75; margin-bottom:12px; white-space:nowrap;}
-        .kpi-split-row{display:flex;justify-content:center;gap:34px;margin:0 0 8px 0;}
-        .kpi-split-title-row{display:flex;justify-content:center;gap:34px;margin:4px 0 6px 0;}
-        .kpi-split-col{flex:1;max-width:290px;margin:0 8px;}
+        .kpi-split-row{display:flex;justify-content:center;gap:24px;margin:0 0 8px 0;}
+        .kpi-split-title-row{display:flex;justify-content:center;gap:24px;margin:4px 0 6px 0;}
+        .kpi-split-col{flex:1;max-width:270px;margin:0 6px;}
         .kpi-split-card-title{text-align:center;margin-bottom:8px;display:block;}
         .kpi-split-card-title-small{text-align:center;font-size:12px;font-weight:800;letter-spacing:0.04em;opacity:0.72;text-transform:uppercase;margin-bottom:2px;}
         .kpi-split-card-title-name{text-align:center;font-size:20px;font-weight:900;line-height:1.2;margin-bottom:8px;}
@@ -679,7 +735,7 @@ def render(ctx: dict):
         .kpi-metric-block{margin-bottom:14px;}
         .kpi-metric-block:last-child{margin-bottom:0;}
         .kpi-center-line{width:100%;background:rgba(20,20,20,0.82);border-radius:0;}
-        .kpi-bar-card{border:2px solid rgba(128,128,128,0.35);border-radius:10px;padding:8px 10px 7px 10px;background:var(--secondary-background-color);margin-bottom:6px;max-width:480px;}
+        .kpi-bar-card{border:2px solid rgba(128,128,128,0.35);border-radius:10px;padding:8px 10px 7px 10px;background:var(--secondary-background-color);margin-bottom:6px;max-width:420px;}
         .kpi-bar-title{font-size:11px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;opacity:0.78;margin-bottom:5px;}
         .kpi-bar-row{display:flex;justify-content:space-between;align-items:center;gap:10px;}
         .kpi-bar-row-label{font-size:10px;font-weight:800;text-transform:uppercase;opacity:0.70;white-space:nowrap;}
@@ -692,6 +748,10 @@ def render(ctx: dict):
         .kpi-left-offset{height:72px;}
         .kpi-left-row-offset{height:42px;}
         .kpi-dim-subtitle{text-align:center;font-size:16px;font-weight:800;letter-spacing:0.01em;opacity:0.86;margin:-2px 0 8px 0;}
+        .kpi-side-summary{border:2px solid rgba(128,128,128,0.35);border-radius:10px;padding:10px 10px 8px 10px;background:var(--secondary-background-color);margin-top:42px;margin-bottom:10px;max-width:260px;}
+        .kpi-side-summary-title{font-size:11px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;opacity:0.80;margin-bottom:6px;}
+        .kpi-side-summary-line{font-size:12px;line-height:1.35;margin-bottom:3px;}
+        .kpi-side-summary-line:last-child{margin-bottom:0;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -704,39 +764,42 @@ def render(ctx: dict):
     best_a_lbl, best_a_sales, best_a_units, _ = _best_week_stats(dfA)
     best_b_lbl, best_b_sales, best_b_units, _ = _best_week_stats(dfB)
 
-    left_area, right_area = st.columns([1.05, 1.55], gap="large")
-    with left_area:
-        st.markdown("<div class='kpi-left-offset'></div>", unsafe_allow_html=True)
-        _render_top_metric_compare_bars(
-            current_label=a_lbl,
-            compare_label=b_lbl,
-            current_sales=total_sales_a,
-            compare_sales=total_sales_b,
-            current_units=total_units_a,
-            compare_units=total_units_b,
-        )
-    with right_area:
-        _render_split_header(a_lbl, "Difference", b_lbl)
-        _render_split_cards(
-            left_title="Period Total",
-            right_title="Period Total",
-            left_sales=total_sales_a,
-            left_units=total_units_a,
-            right_sales=total_sales_b,
-            right_units=total_units_b,
-            left_ref_sales=total_sales_b,
-            left_ref_units=total_units_b,
-            right_ref_sales=total_sales_a,
-            right_ref_units=total_units_a,
-            left_baseline=b_lbl,
-            right_baseline=a_lbl,
-            left_best_week_label=best_a_lbl,
-            left_best_week_sales=best_a_sales,
-            left_best_week_units=best_a_units,
-            right_best_week_label=best_b_lbl,
-            right_best_week_sales=best_b_sales,
-            right_best_week_units=best_b_units,
-        )
+    _render_split_cards_with_bars(
+        current_label=a_lbl,
+        compare_label=b_lbl,
+        current_sales=total_sales_a,
+        compare_sales=total_sales_b,
+        current_units=total_units_a,
+        compare_units=total_units_b,
+        left_offset_class="kpi-left-offset",
+        bar_card_title_prefix="Period Total",
+        bar_current_label="Current",
+        bar_compare_label="Compare",
+        summary_title="Period Total Summary",
+        render_header=True,
+        header_current_label=a_lbl,
+        header_compare_label=b_lbl,
+        split_card_kwargs={
+            "left_title": "Period Total",
+            "right_title": "Period Total",
+            "left_sales": total_sales_a,
+            "left_units": total_units_a,
+            "right_sales": total_sales_b,
+            "right_units": total_units_b,
+            "left_ref_sales": total_sales_b,
+            "left_ref_units": total_units_b,
+            "right_ref_sales": total_sales_a,
+            "right_ref_units": total_units_a,
+            "left_baseline": b_lbl,
+            "right_baseline": a_lbl,
+            "left_best_week_label": best_a_lbl,
+            "left_best_week_sales": best_a_sales,
+            "left_best_week_units": best_a_units,
+            "right_best_week_label": best_b_lbl,
+            "right_best_week_sales": best_b_sales,
+            "right_best_week_units": best_b_units,
+        },
+    )
 
     retailers_a = _rollup_by_dim(dfA, "Retailer")
     retailers_b = _rollup_by_dim(dfB, "Retailer")

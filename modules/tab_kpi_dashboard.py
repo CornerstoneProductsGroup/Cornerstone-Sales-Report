@@ -264,14 +264,32 @@ def _render_section_summary_box(
 
     biggest_change_line = (
         f"Biggest change: {biggest_metric} {biggest_dir} "
-        f"{abs(biggest_pct):.1f}% ({_fmt_value(biggest_diff, biggest_mode)})."
+        f"{abs(biggest_pct):.1f}%"
+    )
+
+    def _metric_row(label: str, cur_val: float, pct: float, mode: str) -> str:
+        arrow = "▲" if pct > 0 else ("▼" if pct < 0 else "•")
+        color = "#2e7d32" if pct > 0 else ("#c62828" if pct < 0 else "#808080")
+        return (
+            f"<div class='kpi-side-summary-metric-row'>"
+            f"<span class='kpi-side-summary-metric-label'>{label}</span>"
+            f"<span class='kpi-side-summary-metric-val'>{_fmt_value(cur_val, mode)}</span>"
+            f"<span class='kpi-side-summary-metric-delta' style='color:{color};'>{arrow} {abs(pct):.1f}%</span>"
+            f"</div>"
+        )
+
+    rows_html = (
+        _metric_row("Sales", current_sales, sales_pct, "money")
+        + _metric_row("Units", current_units, units_pct, "int")
+        + _metric_row("ASP", current_asp, asp_pct, "money")
     )
 
     summary_html = (
         "<div class='kpi-side-summary'>"
         f"<div class='kpi-side-summary-title'>{summary_title}</div>"
         f"<div class='kpi-side-summary-line'><strong>{current_label}</strong> vs <strong>{compare_label}</strong></div>"
-        f"<div class='kpi-side-summary-reason'>{biggest_change_line}</div>"
+        f"<div class='kpi-side-summary-metrics'>{rows_html}</div>"
+        f"<div class='kpi-side-summary-highlight'>{biggest_change_line}</div>"
         "</div>"
     )
     st.markdown(summary_html, unsafe_allow_html=True)
@@ -771,7 +789,13 @@ def render(ctx: dict):
         .kpi-dim-subtitle{text-align:center;font-size:16px;font-weight:800;letter-spacing:0.01em;opacity:0.86;margin:-2px 0 8px 0;}
         .kpi-side-summary{border:2px solid rgba(128,128,128,0.35);border-radius:10px;padding:10px 10px 8px 10px;background:var(--secondary-background-color);margin-top:42px;margin-bottom:10px;max-width:260px;}
         .kpi-side-summary-title{font-size:11px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;opacity:0.80;margin-bottom:6px;}
-        .kpi-side-summary-line{font-size:12px;line-height:1.35;margin-bottom:3px;}
+        .kpi-side-summary-line{font-size:12px;line-height:1.35;margin-bottom:6px;}
+        .kpi-side-summary-metrics{display:flex;flex-direction:column;gap:3px;margin-bottom:8px;}
+        .kpi-side-summary-metric-row{display:flex;align-items:center;gap:4px;font-size:11px;line-height:1.4;}
+        .kpi-side-summary-metric-label{font-weight:700;min-width:36px;opacity:0.75;}
+        .kpi-side-summary-metric-val{flex:1;font-weight:600;}
+        .kpi-side-summary-metric-delta{font-weight:800;font-size:11px;}
+        .kpi-side-summary-highlight{font-size:11px;font-weight:700;border-top:1px solid rgba(128,128,128,0.25);padding-top:6px;opacity:0.85;}
         .kpi-side-summary-line:last-child{margin-bottom:0;}
         .kpi-side-summary-reasons-title{font-size:11px;font-weight:900;letter-spacing:0.03em;text-transform:uppercase;opacity:0.78;margin-top:8px;margin-bottom:4px;}
         .kpi-side-summary-reason{font-size:11px;line-height:1.3;margin-bottom:2px;opacity:0.9;}

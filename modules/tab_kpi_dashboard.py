@@ -9,8 +9,6 @@ import streamlit as st
 from .shared_core import (
     first_sale_ever,
     money,
-    momentum_label,
-    momentum_score,
     new_placement,
     period_from_df,
 )
@@ -882,6 +880,21 @@ def _fmt_signed_int(value: float) -> str:
     return f"{prefix}{value:,.0f}"
 
 
+def _arrow_delta_text(value: float, suffix: str) -> str:
+    if value > 0:
+        return f"▲ +{suffix}"
+    if value < 0:
+        return f"▼ -{suffix}"
+    return f"• {suffix}"
+
+
+def _format_week_date(value) -> str:
+    ts = pd.to_datetime(value, errors="coerce")
+    if pd.isna(ts):
+        return "unknown week"
+    return ts.strftime("%Y-%m-%d")
+
+
 def _series_by_week(df: pd.DataFrame, metric: str = "Sales") -> pd.DataFrame:
     if df.empty or metric not in df.columns or "WeekEnd" not in df.columns:
         return pd.DataFrame(columns=["WeekIndex", "Week Label", "Value"])
@@ -954,7 +967,8 @@ def _prepare_retailer_share(df_current: pd.DataFrame) -> pd.DataFrame:
 
     total_sales = float(share["Sales"].sum()) or 1.0
     share["Share"] = (share["Sales"] / total_sales) * 100.0
-    share["Label"] = share.apply(lambda row: f"{row['Retailer']}\n{row['Share']:.0f}%", axis=1)
+    share["Label"] = share["Retailer"].astype(str)
+    share["PctLabel"] = share["Share"].map(lambda value: f"{value:.0f}%")
     return share
 
 
@@ -1045,12 +1059,14 @@ def _build_new_product_lines(df_scope: pd.DataFrame, df_current: pd.DataFrame, m
     if not first_ever.empty:
         row = first_ever.iloc[0]
         retailer = str(row.get("FirstRetailer", row.get("Retailer", "a new retailer")))
-        lines.append(f"New SKU {row['SKU']} launched at {retailer}.")
+        start_week = _format_week_date(row.get("FirstWeek"))
+        lines.append(f"New SKU {row['SKU']} launched at {retailer} in week starting {start_week}.")
 
     placements = new_placement(df_scope, period)
     if not placements.empty:
         row = placements.iloc[0]
-        lines.append(f"New retailer placement: {row['SKU']} is now selling at {row['Retailer']}.")
+        start_week = _format_week_date(row.get("FirstWeek"))
+        lines.append(f"New retailer placement: {row['SKU']} started selling at {row['Retailer']} in week starting {start_week}.")
 
     if movers:
         best = next((item for item in movers if item["Color"] == "#1f8f4e"), movers[0])
@@ -1061,7 +1077,7 @@ def _build_new_product_lines(df_scope: pd.DataFrame, df_current: pd.DataFrame, m
     return lines[:3]
 
 
-def _build_exec_kpi_tiles(ctx: dict, momentum_value: float, momentum_text: str, sales_per_week: float, compare_sales_per_week: float, new_sku_count: int) -> list[dict[str, str]]:
+def _build_exec_kpi_tiles(ctx: dict, sales_per_week: float, compare_sales_per_week: float, new_sku_count: int) -> list[dict[str, str]]:
     kA = ctx["kA"]
     kB = ctx["kB"]
     show_compare = ctx["compare_mode"] != "None"
@@ -1073,11 +1089,10 @@ def _build_exec_kpi_tiles(ctx: dict, momentum_value: float, momentum_text: str, 
     active_sku_delta = float(kA.get("Active SKUs", 0.0)) - float(kB.get("Active SKUs", 0.0)) if show_compare else 0.0
 
     return [
-        {"title": "Total Sales", "value": money(float(kA.get("Sales", 0.0))), "delta": _fmt_signed_pct(sales_growth), "color": _delta_color(sales_growth)},
-        {"title": "Units Sold", "value": f"{float(kA.get('Units', 0.0)):,.0f}", "delta": _fmt_signed_pct(units_growth), "color": _delta_color(units_growth)},
-        {"title": "Avg Selling Price", "value": money(float(kA.get("ASP", 0.0))), "delta": _fmt_signed_pct(asp_growth), "color": _delta_color(asp_growth)},
-        {"title": "Sales per Week", "value": money(sales_per_week), "delta": _fmt_signed_pct(sales_per_week_growth, 0), "color": _delta_color(sales_per_week_growth)},
-        {"title": "Momentum Score", "value": f"{momentum_value:,.0f}", "delta": momentum_text, "color": "#2b78d0"},
+        {"title": "Total Sales", "value": money(float(kA.get("Sales", 0.0))), "delta": _arrow_delta_text(sales_growth, _fmt_signed_pct(abs(sales_growth)).lstrip("+")), "color": _delta_color(sales_growth)},
+        {"title": "Units Sold", "value": f"{float(kA.get('Units', 0.0)):,.0f}", "delta": _arrow_delta_text(units_growth, _fmt_signed_pct(abs(units_growth)).lstrip("+")), "color": _delta_color(units_growth)},
+        {"title": "Avg Selling Price", "value": money(float(kA.get("ASP", 0.0))), "delta": _arrow_delta_text(asp_growth, _fmt_signed_pct(abs(asp_growth)).lstrip("+")), "color": _delta_color(asp_growth)},
+        {"title": "Sales per Week", "value": money(sales_per_week), "delta": _arrow_delta_text(sales_per_week_growth, _fmt_signed_pct(abs(sales_per_week_growth), 0).lstrip("+")), "color": _delta_color(sales_per_week_growth)},
         {"title": "% Growth vs Compare", "value": _fmt_signed_pct(sales_growth), "delta": "", "color": _delta_color(sales_growth)},
         {"title": "Active SKUs", "value": f"{float(kA.get('Active SKUs', 0.0)):,.0f}", "delta": _fmt_signed_int(active_sku_delta) if show_compare else "", "color": _delta_color(active_sku_delta)},
         {"title": "New SKUs", "value": f"{new_sku_count:,.0f}", "delta": "", "color": "#111827"},
@@ -1190,7 +1205,7 @@ def _retailer_share_chart(df: pd.DataFrame):
 
     pie = (
         alt.Chart(df)
-        .mark_arc(innerRadius=58, outerRadius=105, stroke="#ffffff", strokeWidth=2)
+        .mark_arc(innerRadius=70, outerRadius=122, stroke="#ffffff", strokeWidth=2)
         .encode(
             theta=alt.Theta("Sales:Q"),
             color=alt.Color("Retailer:N", scale=alt.Scale(range=["#f58220", "#205bac", "#ef4d2d", "#6b7280"]), legend=None),
@@ -1199,10 +1214,15 @@ def _retailer_share_chart(df: pd.DataFrame):
     )
     labels = (
         alt.Chart(df)
-        .mark_text(radius=78, color="white", fontSize=12, fontWeight="bold", lineBreak="\n")
+        .mark_text(radius=96, color="white", fontSize=10, fontWeight="bold", lineBreak="\n")
         .encode(theta=alt.Theta("Sales:Q"), text="Label:N")
     )
-    return (pie + labels).properties(height=220)
+    pct_labels = (
+        alt.Chart(df)
+        .mark_text(radius=82, color="white", fontSize=10, fontWeight="bold")
+        .encode(theta=alt.Theta("Sales:Q"), text="PctLabel:N")
+    )
+    return (pie + labels + pct_labels).properties(height=290)
 
 
 def _weekly_growth_chart(df: pd.DataFrame):
@@ -1260,9 +1280,6 @@ def render(ctx: dict):
         if not hist_up_to_anchor.empty
         else pd.DataFrame(columns=["WeekEnd", "Sales"])
     )
-    overall_momentum = momentum_score(overall_weekly["Sales"]) if not overall_weekly.empty else 0.0
-    overall_momentum_label = momentum_label(overall_momentum)
-
     period = period_from_df(dfA)
     new_sku_count = len(first_sale_ever(df_scope, period)) if period is not None and not df_scope.empty else 0
 
@@ -1270,8 +1287,6 @@ def render(ctx: dict):
 
     tiles = _build_exec_kpi_tiles(
         ctx,
-        momentum_value=overall_momentum,
-        momentum_text=overall_momentum_label,
         sales_per_week=current_sales_per_week,
         compare_sales_per_week=compare_sales_per_week,
         new_sku_count=new_sku_count,

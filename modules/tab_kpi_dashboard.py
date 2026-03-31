@@ -951,7 +951,7 @@ def _prepare_top_skus(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> pd.
     )
     merged = current.merge(compare, on="SKU", how="left").fillna({"CompareSales": 0.0})
     merged["Delta"] = merged["Sales"] - merged["CompareSales"]
-    merged = merged.sort_values("Sales", ascending=False).head(5).copy()
+    merged = merged.sort_values("Sales", ascending=False).head(7).copy()
     merged["Color"] = merged["Delta"].apply(lambda value: "#2da663" if value >= 0 else "#f04e3e")
     merged["SalesLabel"] = merged["Sales"].apply(money)
     return merged
@@ -1051,8 +1051,8 @@ def _prepare_top_movers(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> l
 
     movers = pd.concat(
         [
-            combined.sort_values("Delta", ascending=False).head(2),
-            combined.sort_values("Delta", ascending=True).head(2),
+            combined.sort_values("Delta", ascending=False).head(3),
+            combined.sort_values("Delta", ascending=True).head(3),
         ],
         ignore_index=True,
     )
@@ -1074,7 +1074,7 @@ def _prepare_top_movers(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> l
                 "Color": _delta_color(delta),
             }
         )
-        if len(rows) == 4:
+        if len(rows) == 6:
             break
     return rows
 
@@ -1248,7 +1248,7 @@ def _top_sku_chart(df: pd.DataFrame):
             text="SalesLabel:N",
         )
     )
-    return (bars + labels).properties(height=220)
+    return (bars + labels).properties(height=300)
 
 
 def _retailer_share_chart(df: pd.DataFrame):

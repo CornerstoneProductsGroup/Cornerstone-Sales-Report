@@ -1226,7 +1226,7 @@ def _build_exec_kpi_tiles(ctx: dict, sales_per_week: float, compare_sales_per_we
         primary_only_count, primary_only_sales, reference_only_count, reference_only_sales = _sku_churn(primary_2m, reference_2m)
         if not show_compare:
             return {
-                "title": "SKU Movement (2M)",
+                "title": "New SKUs",
                 "value": "No compare selected",
                 "delta": "",
                 "color": "#6b7280",
@@ -1235,26 +1235,20 @@ def _build_exec_kpi_tiles(ctx: dict, sales_per_week: float, compare_sales_per_we
 
         if primary_name == "Current":
             return {
-                "title": "SKU Movement (2M)",
-                "value": f"New SKUs (Current not Compare): {primary_only_count:,}",
-                "delta": f"Total Sales (New): {money(primary_only_sales)}",
+                "title": "New SKUs",
+                "value": f"{primary_only_count:,}",
+                "delta": f"Total Sales: {money(primary_only_sales)}",
                 "color": _delta_color(primary_only_sales - reference_only_sales),
-                "meta_lines": [
-                    f"Lost SKUs (Compare not Current): {reference_only_count:,}",
-                    f"Total Sales (Lost): {money(reference_only_sales)}",
-                ],
+                "meta_lines": [],
             }
 
         if primary_name == "Compare":
             return {
-                "title": "SKU Movement (2M)",
-                "value": f"New SKUs (Compare not Current): {primary_only_count:,}",
-                "delta": f"Total Sales (New): {money(primary_only_sales)}",
+                "title": "Lost SKUs",
+                "value": f"{primary_only_count:,}",
+                "delta": f"Total Lost Sales: {money(primary_only_sales)}",
                 "color": _delta_color(primary_only_sales - reference_only_sales),
-                "meta_lines": [
-                    f"Lost SKUs (Compare not Current): {primary_only_count:,}",
-                    f"Total Sales (Lost): {money(primary_only_sales)}",
-                ],
+                "meta_lines": [],
             }
 
         return {
@@ -1579,14 +1573,16 @@ def render(ctx: dict):
         compare_sales_per_week=compare_sales_per_week,
         new_sku_count=new_sku_count,
     )
-    _render_exec_kpi_ribbon(
-        current_tiles=tiles["current"],
-        current_row_label=f"Current Totals: {current_label}",
-        current_label=current_label,
-        compare_label=compare_label,
-        compare_tiles=tiles["compare"] if compare_label else None,
-        compare_row_label=(f"Compare Totals: {compare_label}" if compare_label else None),
-    )
+    kpi_col, _ = st.columns([2.6, 0.75], gap="small")
+    with kpi_col:
+        _render_exec_kpi_ribbon(
+            current_tiles=tiles["current"],
+            current_row_label=f"Current Totals: {current_label}",
+            current_label=current_label,
+            compare_label=compare_label,
+            compare_tiles=tiles["compare"] if compare_label else None,
+            compare_row_label=(f"Compare Totals: {compare_label}" if compare_label else None),
+        )
 
     weekly_trend = _prepare_weekly_trend(dfA, dfB, current_label, compare_label)
     trend_col, _ = st.columns([2.6, 0.75], gap="small")

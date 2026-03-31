@@ -1783,18 +1783,9 @@ def render(ctx: dict):
             else:
                 st.altair_chart(sku_chart, use_container_width=True)
 
-    retailer_left_col, retailer_mid_col, _ = st.columns([1.15, 1.45, 0.75], gap="small")
+    retailer_left_col, retailer_mid_col, _ = st.columns([1.45, 1.15, 0.75], gap="small")
 
     with retailer_left_col:
-        with st.container(border=True):
-            st.markdown("#### Retailer Share Change")
-            share_change_chart = _retailer_share_change_chart(share_change_df)
-            if share_change_chart is None:
-                st.info("No retailer share change data available for the selected timeframe.")
-            else:
-                st.altair_chart(share_change_chart, use_container_width=True)
-
-    with retailer_mid_col:
         with st.container(border=True):
             st.markdown("#### Sales by Retailer")
             share_chart = _retailer_share_chart(retailer_share)
@@ -1803,18 +1794,18 @@ def render(ctx: dict):
             else:
                 st.altair_chart(share_chart, use_container_width=True)
 
-    vendor_left_col, vendor_mid_col, _ = st.columns([1.15, 1.45, 0.75], gap="small")
+    with retailer_mid_col:
+        with st.container(border=True):
+            st.markdown("#### Retailer Share Change")
+            share_change_chart = _retailer_share_change_chart(share_change_df)
+            if share_change_chart is None:
+                st.info("No retailer share change data available for the selected timeframe.")
+            else:
+                st.altair_chart(share_change_chart, use_container_width=True)
+
+    vendor_left_col, vendor_mid_col, _ = st.columns([1.45, 1.15, 0.75], gap="small")
 
     with vendor_left_col:
-        with st.container(border=True):
-            st.markdown("#### Vendor Share Change")
-            vendor_share_change_chart = _vendor_share_change_chart(vendor_share_change)
-            if vendor_share_change_chart is None:
-                st.info("No vendor share change data available for the selected timeframe.")
-            else:
-                st.altair_chart(vendor_share_change_chart, use_container_width=True)
-
-    with vendor_mid_col:
         with st.container(border=True):
             st.markdown("#### Sales by Vendor")
             vendor_share_chart = _vendor_share_chart(vendor_share)
@@ -1822,3 +1813,12 @@ def render(ctx: dict):
                 st.info("No vendor sales mix available for the selected timeframe.")
             else:
                 st.altair_chart(vendor_share_chart, use_container_width=True)
+
+    with vendor_mid_col:
+        with st.container(border=True):
+            st.markdown("#### Vendor Share Change")
+            vendor_share_change_chart = _vendor_share_change_chart(vendor_share_change)
+            if vendor_share_change_chart is None:
+                st.info("No vendor share change data available for the selected timeframe.")
+            else:
+                st.altair_chart(vendor_share_change_chart, use_container_width=True)

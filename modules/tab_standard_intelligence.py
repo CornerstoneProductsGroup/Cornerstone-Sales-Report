@@ -542,43 +542,7 @@ def render(ctx: dict):
     if compare_mode == "None":
         st.info("Select a comparison mode to compute increasing/declining vs the compare period.")
     else:
-        a = dfA.groupby("SKU", as_index=False).agg(Sales_A=("Sales", "sum"), Units_A=("Units", "sum"))
-        b = dfB.groupby("SKU", as_index=False).agg(Sales_B=("Sales", "sum"), Units_B=("Units", "sum"))
-        m = a.merge(b, on="SKU", how="outer").fillna(0.0)
-        m["Sales (Current)"] = m["Sales_A"]
-        m["Sales (Compare)"] = m["Sales_B"]
-        m["Sales Δ"] = m["Sales_A"] - m["Sales_B"]
-        m["Δ %"] = np.where(m["Sales_B"] != 0, m["Sales Δ"] / m["Sales_B"], np.nan)
-        m = m[
-            (m["Sales_A"] >= min_sales)
-            | (m["Sales_B"] >= min_sales)
-            | (m["Units_A"] >= min_units)
-            | (m["Units_B"] >= min_units)
-        ].copy()
-
-        inc = m[m["Sales Δ"] > 0].sort_values("Sales Δ", ascending=False).head(10)
-        dec = m[m["Sales Δ"] < 0].sort_values("Sales Δ", ascending=True).head(10)
-
-        def _disp(df_in: pd.DataFrame) -> pd.DataFrame:
-            if df_in.empty:
-                return df_in
-            out = df_in[["SKU", "Sales (Current)", "Sales (Compare)", "Sales Δ", "Δ %"]].copy()
-            out["Sales (Current)"] = out["Sales (Current)"].map(money)
-            out["Sales (Compare)"] = out["Sales (Compare)"].map(money)
-            out["Sales Δ"] = out["Sales Δ"].map(money)
-            out["Δ %"] = out["Δ %"].map(pct_fmt)
-            return out
-
-        inc_disp = _disp(inc)
-        dec_disp = _disp(dec)
-
-        a, b = st.columns(2)
-        with a:
-            st.markdown("**Top Increasing**")
-            render_df(inc_disp, height=320) if not inc_disp.empty else st.caption("None.")
-        with b:
-            st.markdown("**Top Declining**")
-            render_df(dec_disp, height=320) if not dec_disp.empty else st.caption("None.")
+        st.caption("Top increasing/declining SKU tables removed to avoid duplicating the Drivers section.")
 
     st.divider()
     st.subheader("New Activity")

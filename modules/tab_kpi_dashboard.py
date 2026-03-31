@@ -125,6 +125,9 @@ def _render_compact_top_right_kpis(
 
     context_html = (
         "<div class='sales-dashboard-context'>"
+        "<div class='sales-dashboard-top-row'>"
+        f"<div class='sales-dashboard-kpi-strip'>{cards_html}</div>"
+        "</div>"
         "<div class='sales-dashboard-context-copy'>"
         f"<div><strong>Current:</strong> {html.escape(current_label)}</div>"
         + (
@@ -133,9 +136,6 @@ def _render_compact_top_right_kpis(
             else "<div><strong>Compare:</strong> None</div>"
         )
         + "</div>"
-        "<div class='sales-dashboard-top-row'>"
-        f"<div class='sales-dashboard-kpi-strip'>{cards_html}</div>"
-        "</div>"
         "</div>"
     )
     st.markdown(context_html, unsafe_allow_html=True)

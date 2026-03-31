@@ -1215,7 +1215,12 @@ def _build_exec_kpi_tiles(ctx: dict, sales_per_week: float, compare_sales_per_we
             float(lost_rows["Sales"].sum()) if not lost_rows.empty else 0.0,
         )
 
-    def _build_sku_churn_tile(primary_df: pd.DataFrame, reference_df: pd.DataFrame) -> dict[str, object]:
+    def _build_sku_churn_tile(
+        primary_df: pd.DataFrame,
+        reference_df: pd.DataFrame,
+        primary_name: str,
+        reference_name: str,
+    ) -> dict[str, object]:
         primary_2m = _last_two_months(primary_df)
         reference_2m = _last_two_months(reference_df)
         new_count, new_sales, lost_count, lost_sales = _sku_churn(primary_2m, reference_2m)
@@ -1230,12 +1235,12 @@ def _build_exec_kpi_tiles(ctx: dict, sales_per_week: float, compare_sales_per_we
 
         return {
             "title": "SKU Movement (2M)",
-            "value": f"In Parent Not Compare: {new_count:,}",
-            "delta": f"Sales (Parent-only): {money(new_sales)}",
+            "value": f"In {primary_name} Not {reference_name}: {new_count:,}",
+            "delta": f"Sales ({primary_name}-only): {money(new_sales)}",
             "color": _delta_color(new_sales - lost_sales),
             "meta_lines": [
-                f"In Compare Not Parent: {lost_count:,}",
-                f"Sales (Compare-only): {money(lost_sales)}",
+                f"In {reference_name} Not {primary_name}: {lost_count:,}",
+                f"Sales ({reference_name}-only): {money(lost_sales)}",
             ],
         }
 
@@ -1251,14 +1256,14 @@ def _build_exec_kpi_tiles(ctx: dict, sales_per_week: float, compare_sales_per_we
         _build_tile("Total Sales", current_sales, compare_sales, "money"),
         _build_tile("Total Units", current_units, compare_units, "int"),
         _build_tile("ASP", current_asp, compare_asp, "money"),
-        _build_sku_churn_tile(dfA, dfB),
+        _build_sku_churn_tile(dfA, dfB, "Current", "Compare"),
     ]
 
     compare_tiles = [
         _build_tile("Total Sales", compare_sales, current_sales, "money"),
         _build_tile("Total Units", compare_units, current_units, "int"),
         _build_tile("ASP", compare_asp, current_asp, "money"),
-        _build_sku_churn_tile(dfB, dfA),
+        _build_sku_churn_tile(dfB, dfA, "Compare", "Current"),
     ] if show_compare else []
 
     return {"current": current_tiles, "compare": compare_tiles}

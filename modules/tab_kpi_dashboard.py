@@ -1750,8 +1750,8 @@ def render(ctx: dict):
     vendor_share_change = _prepare_vendor_share_change(dfA, dfB)
     movers = _prepare_top_movers(dfA, dfB)
 
-    kpi_col, kpi_right_col = st.columns([2.6, 0.75], gap="small")
-    with kpi_col:
+    left_stack_col, right_stack_col = st.columns([2.6, 0.75], gap="small")
+    with left_stack_col:
         _render_exec_kpi_ribbon(
             current_tiles=tiles["current"],
             current_row_label=f"Current Totals: {current_label}",
@@ -1760,13 +1760,6 @@ def render(ctx: dict):
             compare_tiles=tiles["compare"] if compare_label else None,
             compare_row_label=(f"Compare Totals: {compare_label}" if compare_label else None),
         )
-    with kpi_right_col:
-        with st.container(border=True):
-            st.markdown("#### Top Movers")
-            _render_movers_panel(movers)
-
-    trend_col, trend_right_col = st.columns([2.6, 0.75], gap="small")
-    with trend_col:
         with st.container(border=True):
             st.markdown("#### Weekly Sales Trend")
             trend_chart = _weekly_sales_trend_chart(weekly_trend, current_label, compare_label)
@@ -1774,7 +1767,11 @@ def render(ctx: dict):
                 st.info("No weekly trend data available for the selected timeframe.")
             else:
                 st.altair_chart(trend_chart, use_container_width=True)
-    with trend_right_col:
+
+    with right_stack_col:
+        with st.container(border=True):
+            st.markdown("#### Top Movers")
+            _render_movers_panel(movers)
         with st.container(border=True):
             st.markdown("#### Top Selling SKUs")
             sku_chart = _top_sku_chart(top_skus)

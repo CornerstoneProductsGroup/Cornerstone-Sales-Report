@@ -880,6 +880,14 @@ def _fmt_signed_int(value: float) -> str:
     return f"{prefix}{value:,.0f}"
 
 
+def _fmt_signed_money(value: float) -> str:
+    if value > 0:
+        return f"+{money(abs(value))}"
+    if value < 0:
+        return f"-{money(abs(value))}"
+    return money(0.0)
+
+
 def _money_compact(value: float) -> str:
     value = float(value or 0.0)
     abs_value = abs(value)
@@ -892,9 +900,9 @@ def _money_compact(value: float) -> str:
 
 def _arrow_delta_text(value: float, suffix: str) -> str:
     if value > 0:
-        return f"▲ +{suffix}"
+        return f"▲ {suffix}"
     if value < 0:
-        return f"▼ -{suffix}"
+        return f"▼ {suffix}"
     return f"• {suffix}"
 
 
@@ -941,7 +949,7 @@ def _prepare_weekly_trend(df_current: pd.DataFrame, df_compare: pd.DataFrame, cu
 
 def _prepare_top_skus(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> pd.DataFrame:
     if df_current.empty or "SKU" not in df_current.columns:
-        return pd.DataFrame(columns=["SKU", "Sales", "Delta", "Color", "SalesLabel"])
+        return pd.DataFrame(columns=["SKU", "Sales", "Delta", "Color", "SalesLabel", "DeltaLabel"])
 
     current = df_current.groupby("SKU", as_index=False).agg(Sales=("Sales", "sum"))
     compare = (
@@ -954,6 +962,7 @@ def _prepare_top_skus(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> pd.
     merged = merged.sort_values("Sales", ascending=False).head(7).copy()
     merged["Color"] = merged["Delta"].apply(lambda value: "#2da663" if value >= 0 else "#f04e3e")
     merged["SalesLabel"] = merged["Sales"].apply(money)
+    merged["DeltaLabel"] = merged["Delta"].apply(_fmt_signed_money)
     return merged
 
 
@@ -1138,13 +1147,17 @@ def _build_exec_kpi_tiles(ctx: dict, sales_per_week: float, compare_sales_per_we
     units_growth = _safe_pct_change(float(kA.get("Units", 0.0)), float(kB.get("Units", 0.0))) if show_compare else 0.0
     asp_growth = _safe_pct_change(float(kA.get("ASP", 0.0)), float(kB.get("ASP", 0.0))) if show_compare else 0.0
     sales_per_week_growth = _safe_pct_change(sales_per_week, compare_sales_per_week) if show_compare else 0.0
+    sales_diff = float(kA.get("Sales", 0.0)) - float(kB.get("Sales", 0.0)) if show_compare else 0.0
+    units_diff = float(kA.get("Units", 0.0)) - float(kB.get("Units", 0.0)) if show_compare else 0.0
+    asp_diff = float(kA.get("ASP", 0.0)) - float(kB.get("ASP", 0.0)) if show_compare else 0.0
+    sales_per_week_diff = sales_per_week - compare_sales_per_week if show_compare else 0.0
     active_sku_delta = float(kA.get("Active SKUs", 0.0)) - float(kB.get("Active SKUs", 0.0)) if show_compare else 0.0
 
     return [
-        {"title": "Total Sales", "value": money(float(kA.get("Sales", 0.0))), "delta": _arrow_delta_text(sales_growth, _fmt_signed_pct(abs(sales_growth)).lstrip("+")), "color": _delta_color(sales_growth)},
-        {"title": "Units Sold", "value": f"{float(kA.get('Units', 0.0)):,.0f}", "delta": _arrow_delta_text(units_growth, _fmt_signed_pct(abs(units_growth)).lstrip("+")), "color": _delta_color(units_growth)},
-        {"title": "Avg Selling Price", "value": money(float(kA.get("ASP", 0.0))), "delta": _arrow_delta_text(asp_growth, _fmt_signed_pct(abs(asp_growth)).lstrip("+")), "color": _delta_color(asp_growth)},
-        {"title": "Sales per Week", "value": money(sales_per_week), "delta": _arrow_delta_text(sales_per_week_growth, _fmt_signed_pct(abs(sales_per_week_growth), 0).lstrip("+")), "color": _delta_color(sales_per_week_growth)},
+        {"title": "Total Sales", "value": money(float(kA.get("Sales", 0.0))), "delta": _arrow_delta_text(sales_growth, f"{_fmt_signed_money(sales_diff)} ({_fmt_signed_pct(sales_growth)})"), "color": _delta_color(sales_growth)},
+        {"title": "Units Sold", "value": f"{float(kA.get('Units', 0.0)):,.0f}", "delta": _arrow_delta_text(units_growth, f"{_fmt_signed_int(units_diff)} ({_fmt_signed_pct(units_growth)})"), "color": _delta_color(units_growth)},
+        {"title": "Avg Selling Price", "value": money(float(kA.get("ASP", 0.0))), "delta": _arrow_delta_text(asp_growth, f"{_fmt_signed_money(asp_diff)} ({_fmt_signed_pct(asp_growth)})"), "color": _delta_color(asp_growth)},
+        {"title": "Sales per Week", "value": money(sales_per_week), "delta": _arrow_delta_text(sales_per_week_growth, f"{_fmt_signed_money(sales_per_week_diff)} ({_fmt_signed_pct(sales_per_week_growth, 0)})"), "color": _delta_color(sales_per_week_growth)},
         {"title": "% Growth vs Compare", "value": _fmt_signed_pct(sales_growth), "delta": "", "color": _delta_color(sales_growth)},
         {"title": "Active SKUs", "value": f"{float(kA.get('Active SKUs', 0.0)):,.0f}", "delta": _fmt_signed_int(active_sku_delta) if show_compare else "", "color": _delta_color(active_sku_delta)},
         {"title": "New SKUs", "value": f"{new_sku_count:,.0f}", "delta": "", "color": "#111827"},
@@ -1248,7 +1261,17 @@ def _top_sku_chart(df: pd.DataFrame):
             text="SalesLabel:N",
         )
     )
-    return (bars + labels).properties(height=300)
+    delta_labels = (
+        alt.Chart(df)
+        .mark_text(align="left", baseline="middle", dx=94, fontSize=13, fontWeight="bold")
+        .encode(
+            y=alt.Y("SKU:N", sort="-x", title=None),
+            x=alt.X("Sales:Q", scale=alt.Scale(domain=[0, xmax])),
+            text="DeltaLabel:N",
+            color=alt.Color("Color:N", scale=None, legend=None),
+        )
+    )
+    return (bars + labels + delta_labels).properties(height=300)
 
 
 def _retailer_share_chart(df: pd.DataFrame):

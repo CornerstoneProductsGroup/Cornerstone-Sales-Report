@@ -1603,7 +1603,7 @@ def render(ctx: dict):
     retailer_share = _prepare_retailer_share(dfA, dfB)
     movers = _prepare_top_movers(dfA, dfB)
 
-    left_col, middle_col, right_col = st.columns([1.15, 1.45, 0.75], gap="small")
+    left_col, middle_col = st.columns([1.15, 1.45], gap="small")
 
     with left_col:
         with st.container(border=True):
@@ -1623,13 +1623,7 @@ def render(ctx: dict):
             else:
                 st.altair_chart(share_chart, use_container_width=True)
 
-    with right_col:
-        with st.container(border=True):
-            st.markdown("#### Top Movers")
-            _render_movers_panel(movers)
-
     share_change_df = _prepare_retailer_share_change(dfA, dfB)
-    emerging_lines = _build_new_product_lines(df_scope, dfA, movers)
     bottom_left, bottom_right = st.columns([1.75, 0.95], gap="small")
 
     with bottom_left:
@@ -1643,5 +1637,5 @@ def render(ctx: dict):
 
     with bottom_right:
         with st.container(border=True):
-            st.markdown("#### New & Emerging Products")
-            _render_new_products_panel(emerging_lines)
+            st.markdown("#### Top Movers")
+            _render_movers_panel(movers)

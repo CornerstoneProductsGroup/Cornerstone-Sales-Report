@@ -969,7 +969,46 @@ def _prepare_retailer_share(df_current: pd.DataFrame) -> pd.DataFrame:
     share["Share"] = (share["Sales"] / total_sales) * 100.0
     share["Label"] = share["Retailer"].astype(str)
     share["PctLabel"] = share["Share"].map(lambda value: f"{value:.0f}%")
+    share["LegendLabel"] = share.apply(lambda row: f"{row['Retailer']} ({row['Share']:.0f}%)", axis=1)
     return share
+
+
+def _prepare_retailer_share_change(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> pd.DataFrame:
+    cols = ["Retailer", "CurrentShare", "CompareShare", "Delta", "DeltaText", "DeltaColor", "ShareLabel"]
+    if df_current.empty or "Retailer" not in df_current.columns:
+        return pd.DataFrame(columns=cols)
+
+    cur = (
+        df_current.groupby("Retailer", as_index=False)
+        .agg(Sales=("Sales", "sum"))
+        .sort_values("Sales", ascending=False)
+    )
+    cmp = (
+        df_compare.groupby("Retailer", as_index=False)
+        .agg(CompareSales=("Sales", "sum"))
+        if (not df_compare.empty and "Retailer" in df_compare.columns)
+        else pd.DataFrame(columns=["Retailer", "CompareSales"])
+    )
+
+    merged = cur.merge(cmp, on="Retailer", how="outer").fillna(0.0)
+    cur_total = float(merged["Sales"].sum()) or 1.0
+    cmp_total = float(merged["CompareSales"].sum()) or 1.0
+    merged["CurrentShare"] = (merged["Sales"] / cur_total) * 100.0
+    merged["CompareShare"] = (merged["CompareSales"] / cmp_total) * 100.0
+    merged["Delta"] = merged["CurrentShare"] - merged["CompareShare"]
+    merged = merged.sort_values("CurrentShare", ascending=False).head(8).copy()
+    merged["DeltaColor"] = merged["Delta"].apply(_delta_color)
+
+    def _delta_text(value: float) -> str:
+        if value > 0:
+            return f"▲ +{value:.1f}%"
+        if value < 0:
+            return f"▼ {value:.1f}%"
+        return f"• {value:.1f}%"
+
+    merged["DeltaText"] = merged["Delta"].apply(_delta_text)
+    merged["ShareLabel"] = merged["CurrentShare"].map(lambda value: f"{value:.1f}%")
+    return merged[cols]
 
 
 def _prepare_top_movers(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> list[dict[str, object]]:
@@ -1208,21 +1247,61 @@ def _retailer_share_chart(df: pd.DataFrame):
         .mark_arc(innerRadius=70, outerRadius=122, stroke="#ffffff", strokeWidth=2)
         .encode(
             theta=alt.Theta("Sales:Q"),
-            color=alt.Color("Retailer:N", scale=alt.Scale(range=["#f58220", "#205bac", "#ef4d2d", "#6b7280"]), legend=None),
+            color=alt.Color(
+                "LegendLabel:N",
+                scale=alt.Scale(range=["#f58220", "#205bac", "#ef4d2d", "#6b7280"]),
+                legend=alt.Legend(title=None, orient="right"),
+            ),
             tooltip=[alt.Tooltip("Retailer:N"), alt.Tooltip("Sales:Q", format=",.0f"), alt.Tooltip("Share:Q", format=",.1f")],
         )
-    )
-    labels = (
-        alt.Chart(df)
-        .mark_text(radius=96, color="white", fontSize=10, fontWeight="bold", lineBreak="\n")
-        .encode(theta=alt.Theta("Sales:Q"), text="Label:N")
     )
     pct_labels = (
         alt.Chart(df)
         .mark_text(radius=82, color="white", fontSize=10, fontWeight="bold")
         .encode(theta=alt.Theta("Sales:Q"), text="PctLabel:N")
     )
-    return (pie + labels + pct_labels).properties(height=290)
+    return (pie + pct_labels).properties(height=300)
+
+
+def _retailer_share_change_chart(df: pd.DataFrame):
+    if df.empty:
+        return None
+
+    x_max = max(float(df["CurrentShare"].max()) + 22.0, 35.0)
+    bars = (
+        alt.Chart(df)
+        .mark_bar(cornerRadiusEnd=6, color="#4a90e2")
+        .encode(
+            y=alt.Y("Retailer:N", sort="-x", title=None),
+            x=alt.X("CurrentShare:Q", title=None, scale=alt.Scale(domain=[0, x_max]), axis=alt.Axis(format=",.0f")),
+            tooltip=[
+                alt.Tooltip("Retailer:N"),
+                alt.Tooltip("CurrentShare:Q", title="Current Share", format=",.1f"),
+                alt.Tooltip("CompareShare:Q", title="Compare Share", format=",.1f"),
+                alt.Tooltip("Delta:Q", title="Change", format=",.1f"),
+            ],
+        )
+    )
+    share_text = (
+        alt.Chart(df)
+        .mark_text(align="left", baseline="middle", dx=6, color="#1f2937", fontWeight="bold")
+        .encode(
+            y=alt.Y("Retailer:N", sort="-x", title=None),
+            x=alt.X("CurrentShare:Q", scale=alt.Scale(domain=[0, x_max])),
+            text="ShareLabel:N",
+        )
+    )
+    delta_text = (
+        alt.Chart(df)
+        .mark_text(align="left", baseline="middle", dx=68, fontWeight="bold")
+        .encode(
+            y=alt.Y("Retailer:N", sort="-x", title=None),
+            x=alt.X("CurrentShare:Q", scale=alt.Scale(domain=[0, x_max])),
+            text="DeltaText:N",
+            color=alt.Color("DeltaColor:N", scale=None, legend=None),
+        )
+    )
+    return (bars + share_text + delta_text).properties(height=220)
 
 
 def _weekly_growth_chart(df: pd.DataFrame):
@@ -1331,18 +1410,18 @@ def render(ctx: dict):
             st.markdown("#### Top Movers")
             _render_movers_panel(movers)
 
-    growth_df = _prepare_growth_series(dfA, dfB, compare_label)
+    share_change_df = _prepare_retailer_share_change(dfA, dfB)
     emerging_lines = _build_new_product_lines(df_scope, dfA, movers)
     bottom_left, bottom_right = st.columns([1.75, 0.95], gap="small")
 
     with bottom_left:
         with st.container(border=True):
-            st.markdown("#### Weekly Growth Rate")
-            growth_chart = _weekly_growth_chart(growth_df)
-            if growth_chart is None:
-                st.info("No weekly growth data available for the selected timeframe.")
+            st.markdown("#### Retailer Share Change")
+            share_change_chart = _retailer_share_change_chart(share_change_df)
+            if share_change_chart is None:
+                st.info("No retailer share change data available for the selected timeframe.")
             else:
-                st.altair_chart(growth_chart, use_container_width=True)
+                st.altair_chart(share_change_chart, use_container_width=True)
 
     with bottom_right:
         with st.container(border=True):

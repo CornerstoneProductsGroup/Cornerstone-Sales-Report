@@ -9,6 +9,7 @@ from .shared_core import (
     render_df,
     calc_kpis,
     available_month_labels,
+    available_quarter_labels,
     available_year_labels,
     filter_by_period_labels,
 )
@@ -633,6 +634,7 @@ def _render_compare_section(df_base: pd.DataFrame, metric: str, default_period):
             "Prior period (same length)",
             "YoY (same dates)",
             "Custom months",
+            "Custom quarters",
             "Custom years",
         ],
         index=0,
@@ -680,6 +682,29 @@ def _render_compare_section(df_base: pd.DataFrame, metric: str, default_period):
         df_cmp = filter_by_period_labels(df_base, cmp_months, "Month") if cmp_months else df_base.iloc[0:0].copy()
         cur_label = ", ".join(cur_months) if cur_months else "None"
         cmp_label = ", ".join(cmp_months) if cmp_months else "None"
+
+    elif compare_mode == "Custom quarters":
+        quarter_options = list(reversed(available_quarter_labels(df_base)))
+        c1, c2 = st.columns(2)
+        with c1:
+            cur_quarters = st.multiselect(
+                "Current quarter(s)",
+                options=quarter_options,
+                default=quarter_options[0:1] if quarter_options else [],
+                key="lookup_compare_cur_quarters",
+            )
+        with c2:
+            cmp_quarters = st.multiselect(
+                "Compare quarter(s)",
+                options=quarter_options,
+                default=quarter_options[1:2] if len(quarter_options) > 1 else [],
+                key="lookup_compare_cmp_quarters",
+            )
+
+        df_cur = filter_by_period_labels(df_base, cur_quarters, "Quarter") if cur_quarters else df_base.iloc[0:0].copy()
+        df_cmp = filter_by_period_labels(df_base, cmp_quarters, "Quarter") if cmp_quarters else df_base.iloc[0:0].copy()
+        cur_label = ", ".join(cur_quarters) if cur_quarters else "None"
+        cmp_label = ", ".join(cmp_quarters) if cmp_quarters else "None"
 
     else:
         year_options = list(reversed(available_year_labels(df_base)))

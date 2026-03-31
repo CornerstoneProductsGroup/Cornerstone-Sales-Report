@@ -22,6 +22,7 @@ from .shared_core import (
     money,
     render_df,
     available_month_labels,
+    available_quarter_labels,
     available_year_labels,
     filter_by_period_labels,
     kpi_card,
@@ -2080,12 +2081,17 @@ def render_visual_only(ctx: dict):
     with c1:
         granularity = st.selectbox(
             "Analyze By",
-            ["Year", "Month"],
+            ["Year", "Quarter", "Month"],
             index=0,
             key="multi_compare_visual_granularity",
         )
 
-    options = available_year_labels(df_scope) if granularity == "Year" else available_month_labels(df_scope)
+    if granularity == "Year":
+        options = available_year_labels(df_scope)
+    elif granularity == "Quarter":
+        options = available_quarter_labels(df_scope)
+    else:
+        options = available_month_labels(df_scope)
     default_sel = options[-4:] if len(options) >= 4 else options
 
     with c2:
@@ -2181,12 +2187,17 @@ def render(ctx: dict):
     with c1:
         granularity = st.selectbox(
             "Analyze By",
-            ["Year", "Month"],
+            ["Year", "Quarter", "Month"],
             index=0,
             key="multi_compare_granularity_single",
         )
 
-    options = available_year_labels(df_scope) if granularity == "Year" else available_month_labels(df_scope)
+    if granularity == "Year":
+        options = available_year_labels(df_scope)
+    elif granularity == "Quarter":
+        options = available_quarter_labels(df_scope)
+    else:
+        options = available_month_labels(df_scope)
     default_sel = options[-4:] if len(options) >= 4 else options
 
     with c2:

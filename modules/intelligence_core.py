@@ -16,6 +16,7 @@ from .shared_core import (
     save_store,
     enrich_sales,
     available_month_labels,
+    available_quarter_labels,
     available_year_labels,
     filter_by_period_labels,
     period_from_df,
@@ -384,16 +385,19 @@ def run_app():
         elif analysis_view == "Month / Year Compare":
             multi_granularity = st.selectbox(
                 "Compare By",
-                ["Month", "Year"],
+                ["Month", "Quarter", "Year"],
                 index=0,
                 key="my_compare_by",
             )
-            period_options = (
-                available_month_labels(df_all)
-                if multi_granularity == "Month"
-                else available_year_labels(df_all)
-            )
-            timeframe = "Custom Months" if multi_granularity == "Month" else "Custom Years"
+            if multi_granularity == "Month":
+                period_options = available_month_labels(df_all)
+                timeframe = "Custom Months"
+            elif multi_granularity == "Quarter":
+                period_options = available_quarter_labels(df_all)
+                timeframe = "Custom Quarters"
+            else:
+                period_options = available_year_labels(df_all)
+                timeframe = "Custom Years"
 
             current_labels_sel = st.multiselect(
                 f"Current {multi_granularity}(s)",

@@ -211,6 +211,18 @@ def available_year_labels(df: pd.DataFrame) -> List[str]:
     vals = sorted(pd.Series(w.dropna().dt.year.astype(int).astype(str)).unique().tolist())
     return vals
 
+def available_quarter_labels(df: pd.DataFrame) -> List[str]:
+    w = pd.to_datetime(df.get("WeekEnd"), errors="coerce")
+    w = w.dropna()
+    if w.empty:
+        return []
+
+    years = w.dt.year.astype(int)
+    quarters = w.dt.quarter.astype(int)
+    keys = pd.DataFrame({"Year": years, "Quarter": quarters}).drop_duplicates()
+    keys = keys.sort_values(["Year", "Quarter"]).reset_index(drop=True)
+    return [f"Q{int(q)} {int(y)}" for y, q in keys[["Year", "Quarter"]].itertuples(index=False)]
+
 def filter_by_period_labels(df: pd.DataFrame, labels: List[str], granularity: str) -> pd.DataFrame:
     out = df.copy()
     w = pd.to_datetime(out["WeekEnd"], errors="coerce")
@@ -218,6 +230,8 @@ def filter_by_period_labels(df: pd.DataFrame, labels: List[str], granularity: st
         return out.iloc[0:0].copy()
     if granularity == "Month":
         keys = w.dt.to_period("M").astype(str)
+    elif granularity == "Quarter":
+        keys = "Q" + w.dt.quarter.astype("Int64").astype(str) + " " + w.dt.year.astype("Int64").astype(str)
     else:
         keys = w.dt.year.astype("Int64").astype(str)
     return out[keys.isin(labels)].copy()
@@ -252,6 +266,8 @@ def timeframe_short_label(timeframe: str) -> str:
         return "Months"
     if timeframe == "Custom Years":
         return "Years"
+    if timeframe == "Custom Quarters":
+        return "Quarters"
     if timeframe.startswith("Last ") and "month" in timeframe.lower():
         m = re.findall(r"\d+", timeframe)
         if m:

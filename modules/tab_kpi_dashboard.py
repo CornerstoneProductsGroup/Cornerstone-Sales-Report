@@ -1425,7 +1425,8 @@ def _render_exec_kpi_ribbon(
     st.markdown(
         "<div class='sales-exec-accent'></div>"
         f"{sections_html}"
-        f"<div class='sales-exec-context'>{html.escape(context)}</div>",
+        f"<div class='sales-exec-context'>{html.escape(context)}</div>"
+        "<div class='sales-exec-accent' style='margin:8px 0 0 0;'></div>",
         unsafe_allow_html=True,
     )
 
@@ -1772,13 +1773,6 @@ def render(ctx: dict):
         with st.container(border=True):
             st.markdown("#### Top Movers")
             _render_movers_panel(movers)
-        with st.container(border=True):
-            st.markdown("#### Top Selling SKUs")
-            sku_chart = _top_sku_chart(top_skus)
-            if sku_chart is None:
-                st.info("No SKU sales available for the selected timeframe.")
-            else:
-                st.altair_chart(sku_chart, use_container_width=True)
 
     retailer_left_col, retailer_mid_col, _ = st.columns([1.35, 1.35, 0.30], gap="small")
 
@@ -1819,3 +1813,13 @@ def render(ctx: dict):
                 st.info("No vendor share change data available for the selected timeframe.")
             else:
                 st.altair_chart(vendor_share_change_chart, use_container_width=True)
+
+    sku_left_col, sku_right_col = st.columns([2.6, 0.75], gap="small")
+    with sku_right_col:
+        with st.container(border=True):
+            st.markdown("#### Top Selling SKUs")
+            sku_chart = _top_sku_chart(top_skus)
+            if sku_chart is None:
+                st.info("No SKU sales available for the selected timeframe.")
+            else:
+                st.altair_chart(sku_chart, use_container_width=True)

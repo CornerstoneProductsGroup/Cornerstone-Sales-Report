@@ -1258,7 +1258,7 @@ def render_standard_view(
 
     lcol, rcol = st.columns(2)
     with lcol:
-        st.markdown("**Lost Activity — sold in compare, zero in current**")
+        st.markdown("**In Compare and Not Current**")
         if lost.empty:
             st.caption("None.")
         else:
@@ -1276,7 +1276,7 @@ def render_standard_view(
             render_df(show_lost, height=360)
 
     with rcol:
-        st.markdown("**New Activity — sold in current, zero in compare**")
+        st.markdown("**In Current and Not Compare**")
         if new_act.empty:
             st.caption("None.")
         else:

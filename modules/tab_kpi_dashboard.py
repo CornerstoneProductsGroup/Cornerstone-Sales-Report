@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 import pandas as pd
 import streamlit as st
 
@@ -56,6 +58,87 @@ def _delta_stacked_html(value: float, reference: float, mode: str) -> str:
         f"<div style='color:{color};font-weight:800;font-size:13px;line-height:1.3;'>{arrow} {delta_val}</div>"
         f"<div style='color:{color};font-weight:700;font-size:13px;line-height:1.3;'>{pct:,.1f}%</div>"
     )
+
+
+def _delta_stack_parts(value: float, reference: float, mode: str) -> tuple[str, str, str]:
+    delta = float(value) - float(reference)
+    if delta > 0:
+        arrow = "▲"
+        color = "#2e7d32"
+    elif delta < 0:
+        arrow = "▼"
+        color = "#c62828"
+    else:
+        arrow = "•"
+        color = "#808080"
+
+    pct = (abs(delta) / abs(float(reference)) * 100.0) if float(reference) != 0 else 0.0
+    delta_val = _fmt_value(abs(delta), mode)
+    return (color, f"{arrow} {delta_val}", f"{arrow} {pct:,.1f}%")
+
+
+def _render_compact_top_right_kpis(
+    *,
+    current_label: str,
+    compare_label: str | None,
+    current_sales: float,
+    compare_sales: float,
+    current_units: float,
+    compare_units: float,
+    show_compare: bool,
+):
+    current_asp = _calc_asp(current_sales, current_units)
+    compare_asp = _calc_asp(compare_sales, compare_units)
+
+    metric_specs = [
+        ("Total Sales", current_sales, compare_sales, "money"),
+        ("Total Units", current_units, compare_units, "int"),
+        ("ASP", current_asp, compare_asp, "money"),
+    ]
+
+    cards_html = ""
+    for title, current_value, compare_value, mode in metric_specs:
+        color, delta_line, pct_line = _delta_stack_parts(current_value, compare_value, mode)
+        compare_note = (
+            f"vs {html.escape(str(compare_label or 'Compare'))}"
+            if show_compare
+            else "No compare selected"
+        )
+        delta_html = (
+            ""
+            if not show_compare
+            else (
+                "<div class='sales-dashboard-kpi-delta-stack'>"
+                f"<div class='sales-dashboard-kpi-delta-line' style='color:{color};'>{delta_line}</div>"
+                f"<div class='sales-dashboard-kpi-pct-line' style='color:{color};'>{pct_line}</div>"
+                "</div>"
+            )
+        )
+        cards_html += (
+            "<div class='kpi-card sales-dashboard-kpi-card'>"
+            f"<div class='kpi-title'>{html.escape(title)}</div>"
+            f"<div class='kpi-value'>{html.escape(_fmt_value(current_value, mode))}</div>"
+            f"<div class='sales-dashboard-kpi-compare'>{compare_note}</div>"
+            f"{delta_html}"
+            "</div>"
+        )
+
+    context_html = (
+        "<div class='sales-dashboard-context'>"
+        "<div class='sales-dashboard-context-copy'>"
+        f"<div><strong>Current:</strong> {html.escape(current_label)}</div>"
+        + (
+            f"<div><strong>Compare:</strong> {html.escape(compare_label or 'None')}</div>"
+            if show_compare
+            else "<div><strong>Compare:</strong> None</div>"
+        )
+        + "</div>"
+        "<div class='sales-dashboard-top-row'>"
+        f"<div class='sales-dashboard-kpi-strip'>{cards_html}</div>"
+        "</div>"
+        "</div>"
+    )
+    st.markdown(context_html, unsafe_allow_html=True)
 
 
 def _render_entity_kpi_card(
@@ -766,5 +849,20 @@ def _render_dimension_section(
 
 
 def render(ctx: dict):
+    kA = ctx["kA"]
+    kB = ctx["kB"]
+    a_lbl = ctx["a_lbl"]
+    b_lbl = ctx["b_lbl"]
+    compare_mode = ctx["compare_mode"]
+
     st.markdown("### Sales Dashboard")
-    st.caption("Dashboard reset complete. This tab is intentionally blank so you can rebuild from scratch.")
+
+    _render_compact_top_right_kpis(
+        current_label=a_lbl or "Current timeframe",
+        compare_label=b_lbl,
+        current_sales=float(kA.get("Sales", 0.0)),
+        compare_sales=float(kB.get("Sales", 0.0)),
+        current_units=float(kA.get("Units", 0.0)),
+        compare_units=float(kB.get("Units", 0.0)),
+        show_compare=(compare_mode != "None" and bool(b_lbl)),
+    )

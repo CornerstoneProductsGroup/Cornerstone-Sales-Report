@@ -32,6 +32,33 @@ def apply_global_styles():
     /* Streamlit Dataframe Enhancement */
     div[data-testid="stDataFrame"] * {font-size:14px !important;}
     div[data-testid="stDataFrame"] {border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+
+    /* Sales dashboard top-right KPI strip */
+    .sales-dashboard-top-row{display:flex;justify-content:flex-end;align-items:flex-start;width:100%;margin:0 0 8px 0;}
+    .sales-dashboard-kpi-strip{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;max-width:100%;}
+    .sales-dashboard-kpi-card{min-width:150px;max-width:170px;padding:12px 14px;border-radius:14px;}
+    .sales-dashboard-kpi-card .kpi-title{font-size:11px;letter-spacing:0.05em;}
+    .sales-dashboard-kpi-card .kpi-value{font-size:24px;line-height:1.05;margin-top:4px;}
+    .sales-dashboard-kpi-compare{font-size:11px;color:var(--text-color);opacity:0.66;margin-top:6px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .sales-dashboard-kpi-delta-stack{margin-top:8px;display:flex;flex-direction:column;gap:2px;}
+    .sales-dashboard-kpi-delta-line{font-size:13px;font-weight:800;line-height:1.15;}
+    .sales-dashboard-kpi-pct-line{font-size:12px;font-weight:700;line-height:1.1;}
+    .sales-dashboard-context{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin:0 0 10px 0;}
+    .sales-dashboard-context-copy{font-size:13px;color:var(--text-color);opacity:0.82;line-height:1.35;}
+
+    @media (max-width: 1100px) {
+        .sales-dashboard-top-row{justify-content:flex-start;}
+        .sales-dashboard-kpi-strip{justify-content:flex-start;}
+    }
+
+    @media (max-width: 768px) {
+        .sales-dashboard-kpi-strip{display:grid;grid-template-columns:repeat(2, minmax(140px, 1fr));width:100%;}
+        .sales-dashboard-kpi-card{max-width:none;min-width:0;}
+    }
+
+    @media (max-width: 540px) {
+        .sales-dashboard-kpi-strip{grid-template-columns:1fr;}
+    }
     
     /* Dataframe Header Styling */
     div[data-testid="stDataFrame"] [data-testid="stTableHeaderCell"] {

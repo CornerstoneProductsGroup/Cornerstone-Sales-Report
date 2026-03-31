@@ -6,6 +6,28 @@ import streamlit as st
 from .shared_core import money
 
 
+def _retailer_logo_url(retailer_name: str) -> str:
+    """Return a best-effort logo URL for common retailers; empty string when unknown."""
+    key = str(retailer_name or "").strip().lower()
+    domain_map = {
+        "home depot": "homedepot.com",
+        "the home depot": "homedepot.com",
+        "depot": "homedepot.com",
+        "lowe's": "lowes.com",
+        "lowes": "lowes.com",
+        "tractor supply": "tractorsupply.com",
+        "ace": "acehardware.com",
+        "walmart": "walmart.com",
+        "amazon": "amazon.com",
+        "orgill": "orgill.com",
+        "zoro": "zoro.com",
+    }
+    domain = domain_map.get(key)
+    if not domain:
+        return ""
+    return f"https://logo.clearbit.com/{domain}"
+
+
 def _fmt_value(value: float, mode: str) -> str:
     if mode == "money":
         return money(value)
@@ -769,6 +791,13 @@ def render(ctx: dict):
         .sales-panel{background:#1a1f26;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;min-height:250px;}
         .sales-panel-title{font-size:13px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;color:#eaf0f8;margin-bottom:8px;}
         .sales-chip{display:inline-block;background:#202733;border:1px solid rgba(255,255,255,0.09);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;color:#aeb8c5;margin-right:6px;}
+        .sales-logo-card{background:#1a1f26;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 10px;text-align:center;min-height:148px;}
+        .sales-logo-wrap{height:52px;display:flex;align-items:center;justify-content:center;margin-bottom:8px;}
+        .sales-logo-img{max-height:46px;max-width:110px;object-fit:contain;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.35));}
+        .sales-logo-fallback{width:46px;height:46px;border-radius:999px;background:#2a3340;color:#dbe6f2;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;border:1px solid rgba(255,255,255,0.14);}
+        .sales-logo-name{font-size:12px;font-weight:800;color:#e8eef6;line-height:1.2;min-height:30px;display:flex;align-items:center;justify-content:center;}
+        .sales-logo-sales{font-size:18px;font-weight:900;color:#f7fbff;line-height:1.2;margin-top:6px;}
+        .sales-logo-caption{font-size:10px;color:#9aa5b2;text-transform:uppercase;letter-spacing:0.06em;margin-top:2px;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -935,6 +964,43 @@ def render(ctx: dict):
             st.markdown(_tile_html("Largest Decline", str(best_drop["Retailer"]), f"Current: {money(float(best_drop['Sales']))}", "sales-delta-down", f"▼ {money(abs(float(best_drop['Delta'])))}"), unsafe_allow_html=True)
         else:
             st.markdown(_tile_html("Largest Decline", "-", "Current: $0", "sales-delta-flat", "▼ $0"), unsafe_allow_html=True)
+
+    st.markdown("<div class='sales-panel-title' style='margin:16px 0 10px 0;'>Retailers In Selected Timeframe</div>", unsafe_allow_html=True)
+    retailer_cards = retailers_a.head(12).copy()
+    if retailer_cards.empty:
+        st.info("No retailer data for the selected timeframe.")
+    else:
+        cols_per_row = 6
+        for start in range(0, len(retailer_cards), cols_per_row):
+            row = retailer_cards.iloc[start : start + cols_per_row]
+            cols = st.columns(cols_per_row, gap="small")
+            for idx, (_, r) in enumerate(row.iterrows()):
+                retailer_name = str(r["Retailer"])
+                retailer_sales = float(r["Sales"])
+                logo_url = _retailer_logo_url(retailer_name)
+                initials = "".join([p[0] for p in retailer_name.split()[:2]]).upper() or "R"
+
+                with cols[idx]:
+                    if logo_url:
+                        logo_html = (
+                            f"<img class='sales-logo-img' src='{logo_url}' alt='{retailer_name} logo' "
+                            f"onerror=\"this.style.display='none'; this.nextElementSibling.style.display='flex';\">"
+                            f"<div class='sales-logo-fallback' style='display:none;'>{initials}</div>"
+                        )
+                    else:
+                        logo_html = f"<div class='sales-logo-fallback'>{initials}</div>"
+
+                    st.markdown(
+                        (
+                            "<div class='sales-logo-card'>"
+                            f"<div class='sales-logo-wrap'>{logo_html}</div>"
+                            f"<div class='sales-logo-name'>{retailer_name}</div>"
+                            f"<div class='sales-logo-sales'>{money(retailer_sales)}</div>"
+                            "<div class='sales-logo-caption'>Total Sales</div>"
+                            "</div>"
+                        ),
+                        unsafe_allow_html=True,
+                    )
 
     table_cols = st.columns(2, gap="small")
     with table_cols[0]:

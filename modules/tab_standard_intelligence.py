@@ -315,36 +315,6 @@ def render(ctx: dict):
         tab_kpi_dashboard.render(ctx)
         st.divider()
 
-    st.subheader("Drivers (Contribution to change)")
-    if compare_mode == "None":
-        st.info("Select a comparison mode to compute drivers.")
-    else:
-        drv = drivers(dfA, dfB, driver_level)
-        drv_show = drv.copy()
-        drv_show = drv_show[(drv_show["Sales_A"] >= min_sales) | (drv_show["Sales_B"] >= min_sales)]
-
-        pos = drv_show[drv_show["Sales_Δ"] > 0].head(10).copy()
-        neg = drv_show[drv_show["Sales_Δ"] < 0].sort_values("Sales_Δ").head(10).copy()
-
-        for d in (pos, neg):
-            d["Sales_A"] = d["Sales_A"].map(money)
-            d["Sales_B"] = d["Sales_B"].map(money)
-            d["Sales_Δ"] = d["Sales_Δ"].map(lambda v: f"{money(v)}")
-            d["Contribution_%"] = d["Contribution_%"].map(pct_fmt)
-
-        left, right = st.columns(2)
-        pos_disp = rename_ab_columns(pos, a_lbl, b_lbl)
-        neg_disp = rename_ab_columns(neg, a_lbl, b_lbl)
-        sales_a_col = f"Sales ({a_lbl})"
-        sales_b_col = f"Sales ({b_lbl})" if b_lbl else "Sales (Comparison)"
-
-        with left:
-            st.markdown("**Top Positive Contributors**")
-            render_df(pos_disp[[driver_level, sales_a_col, sales_b_col, "Sales_Δ", "Contribution_%"]], height=320)
-        with right:
-            st.markdown("**Top Negative Contributors**")
-            render_df(neg_disp[[driver_level, sales_a_col, sales_b_col, "Sales_Δ", "Contribution_%"]], height=320)
-
     first_ever = first_sale_ever(df_hist_for_new, pA)
     placements = new_placement(df_hist_for_new, pA)
 
@@ -497,6 +467,37 @@ def render(ctx: dict):
             hide_index=True,
             column_config=col_cfg,
         )
+
+    st.divider()
+    st.subheader("Drivers (Contribution to change)")
+    if compare_mode == "None":
+        st.info("Select a comparison mode to compute drivers.")
+    else:
+        drv = drivers(dfA, dfB, driver_level)
+        drv_show = drv.copy()
+        drv_show = drv_show[(drv_show["Sales_A"] >= min_sales) | (drv_show["Sales_B"] >= min_sales)]
+
+        pos = drv_show[drv_show["Sales_Δ"] > 0].sort_values("Sales_Δ", ascending=False).copy()
+        neg = drv_show[drv_show["Sales_Δ"] < 0].sort_values("Sales_Δ", ascending=True).copy()
+
+        for d in (pos, neg):
+            d["Sales_A"] = d["Sales_A"].map(money)
+            d["Sales_B"] = d["Sales_B"].map(money)
+            d["Sales_Δ"] = d["Sales_Δ"].map(lambda v: f"{money(v)}")
+            d["Contribution_%"] = d["Contribution_%"].map(pct_fmt)
+
+        left, right = st.columns(2)
+        pos_disp = rename_ab_columns(pos, a_lbl, b_lbl)
+        neg_disp = rename_ab_columns(neg, a_lbl, b_lbl)
+        sales_a_col = f"Sales ({a_lbl})"
+        sales_b_col = f"Sales ({b_lbl})" if b_lbl else "Sales (Comparison)"
+
+        with left:
+            st.markdown("**Positive Contributors**")
+            render_df(pos_disp[[driver_level, sales_a_col, sales_b_col, "Sales_Δ", "Contribution_%"]], height=320)
+        with right:
+            st.markdown("**Negative Contributors**")
+            render_df(neg_disp[[driver_level, sales_a_col, sales_b_col, "Sales_Δ", "Contribution_%"]], height=320)
 
     st.divider()
     st.subheader("New Activity")

@@ -1042,6 +1042,93 @@ def _prepare_retailer_share_change(df_current: pd.DataFrame, df_compare: pd.Data
     return merged[cols]
 
 
+def _prepare_vendor_share(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> pd.DataFrame:
+    cols = ["Vendor", "Sales", "CompareSales", "Delta", "Color", "SalesLabel", "DeltaLabel", "DeltaX", "SalesX"]
+    if df_current.empty or "Vendor" not in df_current.columns:
+        return pd.DataFrame(columns=cols)
+
+    current = (
+        df_current.groupby("Vendor", as_index=False)
+        .agg(Sales=("Sales", "sum"))
+        .sort_values("Sales", ascending=False)
+        .reset_index(drop=True)
+    )
+    compare = (
+        df_compare.groupby("Vendor", as_index=False).agg(CompareSales=("Sales", "sum"))
+        if not df_compare.empty and "Vendor" in df_compare.columns
+        else pd.DataFrame(columns=["Vendor", "CompareSales"])
+    )
+    merged = current.merge(compare, on="Vendor", how="outer").fillna(0.0)
+    merged = merged.sort_values("Sales", ascending=False).reset_index(drop=True)
+
+    if len(merged) > 7:
+        top = merged.head(7).copy()
+        top.loc[len(top)] = {
+            "Vendor": "Other",
+            "Sales": float(merged.iloc[7:]["Sales"].sum()),
+            "CompareSales": float(merged.iloc[7:]["CompareSales"].sum()),
+        }
+        merged = top
+
+    merged["Delta"] = merged["Sales"] - merged["CompareSales"]
+    merged["Color"] = merged["Delta"].apply(_delta_color)
+    merged["SalesLabel"] = merged["Sales"].apply(money)
+    merged["DeltaLabel"] = merged["Delta"].apply(_fmt_signed_money)
+    max_sales = float(merged["Sales"].max()) if not merged.empty else 1.0
+    merged["SalesX"] = merged["Sales"] + (max_sales * 0.015)
+    merged["DeltaX"] = merged["Sales"] + (max_sales * 0.125)
+    return merged[cols]
+
+
+def _prepare_vendor_share_change(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> pd.DataFrame:
+    cols = ["Vendor", "CurrentShare", "CompareShare", "Delta", "DeltaText", "DeltaColor", "ShareLabel"]
+    if df_current.empty or "Vendor" not in df_current.columns:
+        return pd.DataFrame(columns=cols)
+
+    cur = (
+        df_current.groupby("Vendor", as_index=False)
+        .agg(Sales=("Sales", "sum"))
+        .sort_values("Sales", ascending=False)
+    )
+    cmp = (
+        df_compare.groupby("Vendor", as_index=False)
+        .agg(CompareSales=("Sales", "sum"))
+        if (not df_compare.empty and "Vendor" in df_compare.columns)
+        else pd.DataFrame(columns=["Vendor", "CompareSales"])
+    )
+
+    merged = cur.merge(cmp, on="Vendor", how="outer").fillna(0.0)
+    merged = merged.sort_values("Sales", ascending=False).reset_index(drop=True)
+
+    if len(merged) > 7:
+        top = merged.head(7).copy()
+        top.loc[len(top)] = {
+            "Vendor": "Other",
+            "Sales": float(merged.iloc[7:]["Sales"].sum()),
+            "CompareSales": float(merged.iloc[7:]["CompareSales"].sum()),
+        }
+        merged = top
+
+    cur_total = float(merged["Sales"].sum()) or 1.0
+    cmp_total = float(merged["CompareSales"].sum()) or 1.0
+    merged["CurrentShare"] = (merged["Sales"] / cur_total) * 100.0
+    merged["CompareShare"] = (merged["CompareSales"] / cmp_total) * 100.0
+    merged["Delta"] = merged["CurrentShare"] - merged["CompareShare"]
+    merged = merged.sort_values("CurrentShare", ascending=False).copy()
+    merged["DeltaColor"] = merged["Delta"].apply(_delta_color)
+
+    def _delta_text(value: float) -> str:
+        if value > 0:
+            return f"▲ +{value:.1f}%"
+        if value < 0:
+            return f"▼ {value:.1f}%"
+        return f"• {value:.1f}%"
+
+    merged["DeltaText"] = merged["Delta"].apply(_delta_text)
+    merged["ShareLabel"] = merged["CurrentShare"].map(lambda value: f"{value:.1f}%")
+    return merged[cols]
+
+
 def _prepare_top_movers(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> list[dict[str, object]]:
     if df_current.empty or "SKU" not in df_current.columns:
         return []
@@ -1507,6 +1594,88 @@ def _retailer_share_change_chart(df: pd.DataFrame):
     return (bars + share_text + delta_text).properties(height=292)
 
 
+def _vendor_share_chart(df: pd.DataFrame):
+    if df.empty:
+        return None
+
+    x_max = max(float(df["Sales"].max()) * 1.32 if not df.empty else 1.0, 1.0)
+    bars = (
+        alt.Chart(df)
+        .mark_bar(cornerRadiusEnd=6, color="#2b78d0")
+        .encode(
+            y=alt.Y("Vendor:N", sort="-x", title=None),
+            x=alt.X("Sales:Q", title=None, axis=alt.Axis(labels=False, ticks=False, domain=False), scale=alt.Scale(domain=[0, x_max])),
+            tooltip=[
+                alt.Tooltip("Vendor:N"),
+                alt.Tooltip("Sales:Q", format=",.0f"),
+                alt.Tooltip("Delta:Q", title="Difference", format=",.0f"),
+            ],
+        )
+    )
+    sales_labels = (
+        alt.Chart(df)
+        .mark_text(align="left", baseline="middle", dx=8, color="#1f2937", fontSize=13, fontWeight="bold")
+        .encode(
+            y=alt.Y("Vendor:N", sort="-x", title=None),
+            x=alt.X("SalesX:Q", scale=alt.Scale(domain=[0, x_max])),
+            text="SalesLabel:N",
+        )
+    )
+    delta_labels = (
+        alt.Chart(df)
+        .mark_text(align="left", baseline="middle", dx=8, fontSize=12, fontWeight="bold")
+        .encode(
+            y=alt.Y("Vendor:N", sort="-x", title=None),
+            x=alt.X("DeltaX:Q", scale=alt.Scale(domain=[0, x_max])),
+            text="DeltaLabel:N",
+            color=alt.Color("Color:N", scale=None, legend=None),
+        )
+    )
+
+    return (bars + delta_labels + sales_labels).properties(height=300)
+
+
+def _vendor_share_change_chart(df: pd.DataFrame):
+    if df.empty:
+        return None
+
+    x_max = max(float(df["CurrentShare"].max()) + 22.0, 35.0)
+    bars = (
+        alt.Chart(df)
+        .mark_bar(cornerRadiusEnd=6, color="#4a90e2")
+        .encode(
+            y=alt.Y("Vendor:N", sort="-x", title=None),
+            x=alt.X("CurrentShare:Q", title=None, scale=alt.Scale(domain=[0, x_max]), axis=alt.Axis(format=",.0f")),
+            tooltip=[
+                alt.Tooltip("Vendor:N"),
+                alt.Tooltip("CurrentShare:Q", title="Current Share", format=",.1f"),
+                alt.Tooltip("CompareShare:Q", title="Compare Share", format=",.1f"),
+                alt.Tooltip("Delta:Q", title="Change", format=",.1f"),
+            ],
+        )
+    )
+    share_text = (
+        alt.Chart(df)
+        .mark_text(align="left", baseline="middle", dx=6, color="#1f2937", fontWeight="bold", fontSize=15)
+        .encode(
+            y=alt.Y("Vendor:N", sort="-x", title=None),
+            x=alt.X("CurrentShare:Q", scale=alt.Scale(domain=[0, x_max])),
+            text="ShareLabel:N",
+        )
+    )
+    delta_text = (
+        alt.Chart(df)
+        .mark_text(align="left", baseline="middle", dx=74, fontWeight="bold", fontSize=14)
+        .encode(
+            y=alt.Y("Vendor:N", sort="-x", title=None),
+            x=alt.X("CurrentShare:Q", scale=alt.Scale(domain=[0, x_max])),
+            text="DeltaText:N",
+            color=alt.Color("DeltaColor:N", scale=None, legend=None),
+        )
+    )
+    return (bars + share_text + delta_text).properties(height=292)
+
+
 def _weekly_growth_chart(df: pd.DataFrame):
     if df.empty:
         return None
@@ -1573,7 +1742,15 @@ def render(ctx: dict):
         compare_sales_per_week=compare_sales_per_week,
         new_sku_count=new_sku_count,
     )
-    kpi_col, _ = st.columns([2.6, 0.75], gap="small")
+    weekly_trend = _prepare_weekly_trend(dfA, dfB, current_label, compare_label)
+    top_skus = _prepare_top_skus(dfA, dfB)
+    retailer_share = _prepare_retailer_share(dfA, dfB)
+    share_change_df = _prepare_retailer_share_change(dfA, dfB)
+    vendor_share = _prepare_vendor_share(dfA, dfB)
+    vendor_share_change = _prepare_vendor_share_change(dfA, dfB)
+    movers = _prepare_top_movers(dfA, dfB)
+
+    kpi_col, kpi_right_col = st.columns([2.6, 0.75], gap="small")
     with kpi_col:
         _render_exec_kpi_ribbon(
             current_tiles=tiles["current"],
@@ -1583,14 +1760,12 @@ def render(ctx: dict):
             compare_tiles=tiles["compare"] if compare_label else None,
             compare_row_label=(f"Compare Totals: {compare_label}" if compare_label else None),
         )
+    with kpi_right_col:
+        with st.container(border=True):
+            st.markdown("#### Top Movers")
+            _render_movers_panel(movers)
 
-    weekly_trend = _prepare_weekly_trend(dfA, dfB, current_label, compare_label)
-    top_skus = _prepare_top_skus(dfA, dfB)
-    retailer_share = _prepare_retailer_share(dfA, dfB)
-    share_change_df = _prepare_retailer_share_change(dfA, dfB)
-    movers = _prepare_top_movers(dfA, dfB)
-
-    trend_col, movers_col, _ = st.columns([1.7, 0.9, 0.75], gap="small")
+    trend_col, trend_right_col = st.columns([2.6, 0.75], gap="small")
     with trend_col:
         with st.container(border=True):
             st.markdown("#### Weekly Sales Trend")
@@ -1599,15 +1774,18 @@ def render(ctx: dict):
                 st.info("No weekly trend data available for the selected timeframe.")
             else:
                 st.altair_chart(trend_chart, use_container_width=True)
-
-    with movers_col:
+    with trend_right_col:
         with st.container(border=True):
-            st.markdown("#### Top Movers")
-            _render_movers_panel(movers)
+            st.markdown("#### Top Selling SKUs")
+            sku_chart = _top_sku_chart(top_skus)
+            if sku_chart is None:
+                st.info("No SKU sales available for the selected timeframe.")
+            else:
+                st.altair_chart(sku_chart, use_container_width=True)
 
-    left_col, middle_col, _ = st.columns([1.15, 1.45, 0.75], gap="small")
+    retailer_left_col, retailer_mid_col, _ = st.columns([1.15, 1.45, 0.75], gap="small")
 
-    with left_col:
+    with retailer_left_col:
         with st.container(border=True):
             st.markdown("#### Retailer Share Change")
             share_change_chart = _retailer_share_change_chart(share_change_df)
@@ -1616,7 +1794,7 @@ def render(ctx: dict):
             else:
                 st.altair_chart(share_change_chart, use_container_width=True)
 
-    with middle_col:
+    with retailer_mid_col:
         with st.container(border=True):
             st.markdown("#### Sales by Retailer")
             share_chart = _retailer_share_chart(retailer_share)
@@ -1625,13 +1803,22 @@ def render(ctx: dict):
             else:
                 st.altair_chart(share_chart, use_container_width=True)
 
-    bottom_left, _, _ = st.columns([1.55, 1.05, 0.75], gap="small")
+    vendor_left_col, vendor_mid_col, _ = st.columns([1.15, 1.45, 0.75], gap="small")
 
-    with bottom_left:
+    with vendor_left_col:
         with st.container(border=True):
-            st.markdown("#### Top Selling SKUs")
-            sku_chart = _top_sku_chart(top_skus)
-            if sku_chart is None:
-                st.info("No SKU sales available for the selected timeframe.")
+            st.markdown("#### Vendor Share Change")
+            vendor_share_change_chart = _vendor_share_change_chart(vendor_share_change)
+            if vendor_share_change_chart is None:
+                st.info("No vendor share change data available for the selected timeframe.")
             else:
-                st.altair_chart(sku_chart, use_container_width=True)
+                st.altair_chart(vendor_share_change_chart, use_container_width=True)
+
+    with vendor_mid_col:
+        with st.container(border=True):
+            st.markdown("#### Sales by Vendor")
+            vendor_share_chart = _vendor_share_chart(vendor_share)
+            if vendor_share_chart is None:
+                st.info("No vendor sales mix available for the selected timeframe.")
+            else:
+                st.altair_chart(vendor_share_chart, use_container_width=True)

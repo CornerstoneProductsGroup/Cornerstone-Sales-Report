@@ -959,7 +959,7 @@ def _prepare_top_skus(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> pd.
     )
     merged = current.merge(compare, on="SKU", how="left").fillna({"CompareSales": 0.0})
     merged["Delta"] = merged["Sales"] - merged["CompareSales"]
-    merged = merged.sort_values("Sales", ascending=False).head(7).copy()
+    merged = merged.sort_values("Sales", ascending=False).head(6).copy()
     merged["Color"] = merged["Delta"].apply(lambda value: "#2da663" if value >= 0 else "#f04e3e")
     merged["SalesLabel"] = merged["Sales"].apply(money)
     merged["DeltaLabel"] = merged["Delta"].apply(_fmt_signed_money)
@@ -998,8 +998,9 @@ def _prepare_retailer_share(df_current: pd.DataFrame, df_compare: pd.DataFrame) 
     merged["Color"] = merged["Delta"].apply(_delta_color)
     merged["SalesLabel"] = merged["Sales"].apply(money)
     merged["DeltaLabel"] = merged["Delta"].apply(_fmt_signed_money)
-    merged["DeltaX"] = merged["Sales"] * 1.02
-    merged["SalesX"] = merged["Sales"] * 1.14
+    max_sales = float(merged["Sales"].max()) if not merged.empty else 1.0
+    merged["SalesX"] = merged["Sales"] + (max_sales * 0.03)
+    merged["DeltaX"] = merged["Sales"] + (max_sales * 0.22)
     return merged[cols]
 
 
@@ -1279,14 +1280,14 @@ def _top_sku_chart(df: pd.DataFrame):
             color=alt.Color("Color:N", scale=None, legend=None),
         )
     )
-    return (bars + labels + delta_labels).properties(height=300)
+    return (bars + labels + delta_labels).properties(height=280)
 
 
 def _retailer_share_chart(df: pd.DataFrame):
     if df.empty:
         return None
 
-    x_max = max(float(df["Sales"].max()) * 1.30 if not df.empty else 1.0, 1.0)
+    x_max = max(float(df["Sales"].max()) * 1.58 if not df.empty else 1.0, 1.0)
     bars = (
         alt.Chart(df)
         .mark_bar(cornerRadiusEnd=6, color="#2b78d0")
@@ -1300,6 +1301,15 @@ def _retailer_share_chart(df: pd.DataFrame):
             ],
         )
     )
+    sales_labels = (
+        alt.Chart(df)
+        .mark_text(align="left", baseline="middle", dx=8, color="#1f2937", fontSize=13, fontWeight="bold")
+        .encode(
+            y=alt.Y("Retailer:N", sort="-x", title=None),
+            x=alt.X("SalesX:Q", scale=alt.Scale(domain=[0, x_max])),
+            text="SalesLabel:N",
+        )
+    )
     delta_labels = (
         alt.Chart(df)
         .mark_text(align="left", baseline="middle", dx=8, fontSize=12, fontWeight="bold")
@@ -1308,15 +1318,6 @@ def _retailer_share_chart(df: pd.DataFrame):
             x=alt.X("DeltaX:Q", scale=alt.Scale(domain=[0, x_max])),
             text="DeltaLabel:N",
             color=alt.Color("Color:N", scale=None, legend=None),
-        )
-    )
-    sales_labels = (
-        alt.Chart(df)
-        .mark_text(align="left", baseline="middle", dx=8, color="#1f2937", fontSize=13, fontWeight="bold")
-        .encode(
-            y=alt.Y("Retailer:N", sort="-x", title=None),
-            x=alt.X("SalesX:Q", scale=alt.Scale(domain=[0, x_max])),
-            text="SalesLabel:N",
         )
     )
 
@@ -1445,7 +1446,7 @@ def render(ctx: dict):
     retailer_share = _prepare_retailer_share(dfA, dfB)
     movers = _prepare_top_movers(dfA, dfB)
 
-    left_col, middle_col, right_col = st.columns([1.35, 1.25, 0.75], gap="small")
+    left_col, middle_col, right_col = st.columns([1.15, 1.45, 0.75], gap="small")
 
     with left_col:
         with st.container(border=True):

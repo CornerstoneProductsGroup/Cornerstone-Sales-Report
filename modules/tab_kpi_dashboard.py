@@ -999,8 +999,8 @@ def _prepare_retailer_share(df_current: pd.DataFrame, df_compare: pd.DataFrame) 
     merged["SalesLabel"] = merged["Sales"].apply(money)
     merged["DeltaLabel"] = merged["Delta"].apply(_fmt_signed_money)
     max_sales = float(merged["Sales"].max()) if not merged.empty else 1.0
-    merged["SalesX"] = merged["Sales"] + (max_sales * 0.03)
-    merged["DeltaX"] = merged["Sales"] + (max_sales * 0.22)
+    merged["SalesX"] = merged["Sales"] + (max_sales * 0.015)
+    merged["DeltaX"] = merged["Sales"] + (max_sales * 0.125)
     return merged[cols]
 
 
@@ -1287,7 +1287,7 @@ def _retailer_share_chart(df: pd.DataFrame):
     if df.empty:
         return None
 
-    x_max = max(float(df["Sales"].max()) * 1.58 if not df.empty else 1.0, 1.0)
+    x_max = max(float(df["Sales"].max()) * 1.32 if not df.empty else 1.0, 1.0)
     bars = (
         alt.Chart(df)
         .mark_bar(cornerRadiusEnd=6, color="#2b78d0")

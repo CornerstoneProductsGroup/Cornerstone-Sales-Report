@@ -538,12 +538,6 @@ def render(ctx: dict):
             column_config=col_cfg,
         )
 
-    st.subheader("Movers & Trend Leaders")
-    if compare_mode == "None":
-        st.info("Select a comparison mode to compute increasing/declining vs the compare period.")
-    else:
-        st.caption("Top increasing/declining SKU tables removed to avoid duplicating the Drivers section.")
-
     st.divider()
     st.subheader("New Activity")
 

@@ -1392,32 +1392,32 @@ def _top_sku_chart(df: pd.DataFrame):
     if df.empty:
         return None
 
-    ymax = float(df["Sales"].max()) * 1.30 if not df.empty else 1.0
+    x_max = max(float(df["Sales"].max()) * 1.30 if not df.empty else 1.0, 1.0)
     bars = (
         alt.Chart(df)
-        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+        .mark_bar(cornerRadiusEnd=6)
         .encode(
-            x=alt.X("SKU:N", sort="-y", title=None, axis=alt.Axis(labelAngle=-28)),
-            y=alt.Y("Sales:Q", title=None, axis=alt.Axis(labels=False, ticks=False, domain=False), scale=alt.Scale(domain=[0, ymax])),
+            y=alt.Y("SKU:N", sort="-x", title=None),
+            x=alt.X("Sales:Q", title=None, axis=alt.Axis(labels=False, ticks=False, domain=False), scale=alt.Scale(domain=[0, x_max])),
             color=alt.Color("Color:N", scale=None, legend=None),
             tooltip=[alt.Tooltip("SKU:N"), alt.Tooltip("Sales:Q", format=",.0f")],
         )
     )
     labels = (
         alt.Chart(df)
-        .mark_text(align="center", baseline="bottom", dy=-8, color="#1f2937", fontSize=13, fontWeight="bold")
+        .mark_text(align="left", baseline="middle", dx=8, color="#1f2937", fontSize=13, fontWeight="bold")
         .encode(
-            x=alt.X("SKU:N", sort="-y", title=None),
-            y=alt.Y("Sales:Q", scale=alt.Scale(domain=[0, ymax])),
+            y=alt.Y("SKU:N", sort="-x", title=None),
+            x=alt.X("Sales:Q", scale=alt.Scale(domain=[0, x_max])),
             text="SalesLabel:N",
         )
     )
     delta_labels = (
         alt.Chart(df)
-        .mark_text(align="center", baseline="bottom", dy=-24, fontSize=12, fontWeight="bold")
+        .mark_text(align="left", baseline="middle", dx=78, fontSize=12, fontWeight="bold")
         .encode(
-            x=alt.X("SKU:N", sort="-y", title=None),
-            y=alt.Y("Sales:Q", scale=alt.Scale(domain=[0, ymax])),
+            y=alt.Y("SKU:N", sort="-x", title=None),
+            x=alt.X("Sales:Q", scale=alt.Scale(domain=[0, x_max])),
             text="DeltaLabel:N",
             color=alt.Color("Color:N", scale=None, legend=None),
         )

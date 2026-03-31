@@ -1175,6 +1175,17 @@ def _build_exec_kpi_tiles(ctx: dict, sales_per_week: float, compare_sales_per_we
             "color": _delta_color(value - reference),
         }
 
+    def _last_two_months(df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty or "WeekEnd" not in df.columns:
+            return df
+        d = df.copy()
+        d["WeekEnd"] = pd.to_datetime(d["WeekEnd"], errors="coerce")
+        anchor = d["WeekEnd"].max()
+        if pd.isna(anchor):
+            return df
+        cutoff = anchor - pd.Timedelta(days=60)
+        return d[d["WeekEnd"] >= cutoff].copy()
+
     def _sku_metrics(df: pd.DataFrame) -> pd.DataFrame:
         if df.empty or "SKU" not in df.columns or "Sales" not in df.columns:
             return pd.DataFrame(columns=["SKU", "Sales"])
@@ -1205,10 +1216,12 @@ def _build_exec_kpi_tiles(ctx: dict, sales_per_week: float, compare_sales_per_we
         )
 
     def _build_sku_churn_tile(primary_df: pd.DataFrame, reference_df: pd.DataFrame) -> dict[str, object]:
-        new_count, new_sales, lost_count, lost_sales = _sku_churn(primary_df, reference_df)
+        primary_2m = _last_two_months(primary_df)
+        reference_2m = _last_two_months(reference_df)
+        new_count, new_sales, lost_count, lost_sales = _sku_churn(primary_2m, reference_2m)
         if not show_compare:
             return {
-                "title": "SKU Churn",
+                "title": "SKU Movement (2M)",
                 "value": "No compare selected",
                 "delta": "",
                 "color": "#6b7280",
@@ -1216,13 +1229,13 @@ def _build_exec_kpi_tiles(ctx: dict, sales_per_week: float, compare_sales_per_we
             }
 
         return {
-            "title": "SKU Churn",
-            "value": f"New SKUs: {new_count:,}",
-            "delta": f"New Sales: {money(new_sales)}",
+            "title": "SKU Movement (2M)",
+            "value": f"In Parent Not Compare: {new_count:,}",
+            "delta": f"Sales (Parent-only): {money(new_sales)}",
             "color": _delta_color(new_sales - lost_sales),
             "meta_lines": [
-                f"Lost SKUs: {lost_count:,}",
-                f"Lost Sales: {money(lost_sales)}",
+                f"In Compare Not Parent: {lost_count:,}",
+                f"Sales (Compare-only): {money(lost_sales)}",
             ],
         }
 

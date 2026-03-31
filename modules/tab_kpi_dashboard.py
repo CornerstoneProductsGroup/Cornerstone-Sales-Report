@@ -880,6 +880,16 @@ def _fmt_signed_int(value: float) -> str:
     return f"{prefix}{value:,.0f}"
 
 
+def _money_compact(value: float) -> str:
+    value = float(value or 0.0)
+    abs_value = abs(value)
+    if abs_value >= 1_000_000:
+        return f"${value / 1_000_000:.1f}M"
+    if abs_value >= 1_000:
+        return f"${value / 1_000:.1f}K"
+    return money(value)
+
+
 def _arrow_delta_text(value: float, suffix: str) -> str:
     if value > 0:
         return f"▲ +{suffix}"
@@ -968,7 +978,7 @@ def _prepare_retailer_share(df_current: pd.DataFrame) -> pd.DataFrame:
     total_sales = float(share["Sales"].sum()) or 1.0
     share["Share"] = (share["Sales"] / total_sales) * 100.0
     share["Label"] = share.apply(
-        lambda row: f"{row['Retailer']}\n{money(float(row['Sales']))}\n{row['Share']:.0f}%",
+        lambda row: f"{row['Retailer']}  {_money_compact(float(row['Sales']))}  {row['Share']:.0f}%",
         axis=1,
     )
     share["PctLabel"] = share["Share"].map(lambda value: f"{value:.0f}%")
@@ -1247,7 +1257,7 @@ def _retailer_share_chart(df: pd.DataFrame):
 
     pie = (
         alt.Chart(df)
-        .mark_arc(innerRadius=0, outerRadius=126, stroke="#ffffff", strokeWidth=2)
+        .mark_arc(innerRadius=0, outerRadius=146, stroke="#ffffff", strokeWidth=2)
         .encode(
             theta=alt.Theta("Sales:Q"),
             color=alt.Color("Retailer:N", scale=alt.Scale(range=["#f58220", "#205bac", "#ef4d2d", "#6b7280"]), legend=None),
@@ -1257,7 +1267,7 @@ def _retailer_share_chart(df: pd.DataFrame):
 
     in_slice_labels = (
         alt.Chart(df)
-        .mark_text(radius=76, color="white", fontSize=11, fontWeight="bold", lineBreak="\n")
+        .mark_text(radius=96, color="white", fontSize=10, fontWeight="bold")
         .encode(theta=alt.Theta("Sales:Q"), text="Label:N")
     )
 

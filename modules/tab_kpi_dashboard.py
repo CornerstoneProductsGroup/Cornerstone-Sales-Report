@@ -1735,8 +1735,6 @@ def render(ctx: dict):
     period = period_from_df(dfA)
     new_sku_count = len(first_sale_ever(df_scope, period)) if period is not None and not df_scope.empty else 0
 
-    st.markdown("### Sales Dashboard")
-
     tiles = _build_exec_kpi_tiles(
         ctx,
         sales_per_week=current_sales_per_week,

@@ -4,6 +4,7 @@ from datetime import date
 import html as _html
 import inspect
 import re as _re
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -287,6 +288,11 @@ def render_model_header_and_summary(
 def run_app():
     st.set_page_config(page_title=APP_TITLE, layout="wide")
     apply_global_styles()
+
+    logo_path = Path(__file__).resolve().parents[1] / "data" / "cornerstone_logo.jpg"
+    if logo_path.exists():
+        st.image(str(logo_path), width=320)
+
     st.title(APP_TITLE)
 
     vm = load_vendor_map()
@@ -618,7 +624,7 @@ def run_app():
         render_visual_analysis_view(ctx)
         return
 
-    if analysis_view != "Sales Dashboard":
+    if analysis_view not in ["Sales Dashboard", "Standard Intelligence"]:
         render_model_header_and_summary(
             analysis_view=analysis_view,
             scope=scope,

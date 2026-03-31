@@ -360,7 +360,6 @@ def run_app():
         analysis_view = st.radio(
             "Analysis View",
             [
-                "Sales Dashboard",
                 "Standard Intelligence",
                 "Month / Year Compare",
                 "Multi Month / Year Compare",
@@ -380,7 +379,7 @@ def run_app():
             timeframe = "YTD"
             compare_mode = "None"
 
-        elif analysis_view in ["Sales Dashboard", "Standard Intelligence"]:
+        elif analysis_view in ["Standard Intelligence"]:
             timeframe = st.selectbox(
                 "Timeframe",
                 [

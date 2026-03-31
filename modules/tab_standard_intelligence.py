@@ -19,6 +19,7 @@ from .shared_core import (
     first_sale_ever,
     new_placement,
 )
+from . import tab_kpi_dashboard
 
 
 def render(ctx: dict):
@@ -310,54 +311,10 @@ def render(ctx: dict):
 
         return out.sort_values(["Sales_lookback", "SKU"], ascending=[False, True]).reset_index(drop=True)
 
-    first_ever = first_sale_ever(df_hist_for_new, pA)
-    placements = new_placement(df_hist_for_new, pA)
+    if hasattr(tab_kpi_dashboard, "render"):
+        tab_kpi_dashboard.render(ctx)
+        st.divider()
 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    with c1:
-        kpi_card("Total Sales", money(kA["Sales"]), kdelta("Sales"))
-    with c2:
-        kpi_card("Total Units", f"{kA['Units']:,.0f}", kdelta("Units"))
-    with c3:
-        kpi_card("Avg Selling Price", money(kA["ASP"]), kdelta("ASP"))
-    with c4:
-        kpi_card("Active SKUs", f"{kA['Active SKUs']:,}", kdelta("Active SKUs"))
-    with c5:
-        kpi_card("First Sales", f"{len(first_ever):,}", "")
-    with c6:
-        kpi_card("New Placements", f"{len(placements):,}", "")
-
-    st.write("")
-
-    r1c1, r1c2, r1c3 = st.columns(3)
-    tR = _top_by_current("Retailer")
-    tV = _top_by_current("Vendor")
-    tS = _top_by_current("SKU")
-    with r1c1:
-        if tR:
-            leader_sales_card("Top Retailer (Sales)", tR[0], tR[1], tR[2])
-    with r1c2:
-        if tV:
-            leader_sales_card("Top Vendor (Sales)", tV[0], tV[1], tV[2])
-    with r1c3:
-        if tS:
-            leader_sales_card("Top SKU (Sales)", tS[0], tS[1], tS[2])
-
-    r2c1, r2c2, r2c3 = st.columns(3)
-    iR = _top_by_increase("Retailer")
-    iV = _top_by_increase("Vendor")
-    iS = _top_by_increase("SKU")
-    with r2c1:
-        if iR:
-            biggest_increase_card("Retailer w/ Biggest Increase", iR[0], iR[1], iR[2])
-    with r2c2:
-        if iV:
-            biggest_increase_card("Vendor w/ Biggest Increase", iV[0], iV[1], iV[2])
-    with r2c3:
-        if iS:
-            biggest_increase_card("SKU w/ Biggest Increase", iS[0], iS[1], iS[2])
-
-    st.write("")
     st.subheader("Drivers (Contribution to change)")
     if compare_mode == "None":
         st.info("Select a comparison mode to compute drivers.")
@@ -387,6 +344,9 @@ def render(ctx: dict):
         with right:
             st.markdown("**Top Negative Contributors**")
             render_df(neg_disp[[driver_level, sales_a_col, sales_b_col, "Sales_Δ", "Contribution_%"]], height=320)
+
+    first_ever = first_sale_ever(df_hist_for_new, pA)
+    placements = new_placement(df_hist_for_new, pA)
 
     st.divider()
     st.subheader("Weekly Detail (Retailer/Vendor x Weeks)")

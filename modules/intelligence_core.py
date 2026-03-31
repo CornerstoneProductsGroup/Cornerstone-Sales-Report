@@ -294,7 +294,11 @@ def run_app():
 
     with st.sidebar:
         st.header("Data")
-        up = st.file_uploader("Upload weekly sales workbook (.xlsx)", type=["xlsx"])
+        uploads = st.file_uploader(
+            "Upload weekly sales workbook (.xlsx)",
+            type=["xlsx"],
+            accept_multiple_files=True,
+        )
         year = st.number_input(
             "Year hint (for filename parsing)",
             min_value=2010,
@@ -303,14 +307,28 @@ def run_app():
             step=1,
         )
 
-        if st.button("Ingest upload", disabled=(up is None)):
-            if up is not None:
-                raw = read_weekly_workbook(up, int(year))
-                _ = enrich_sales(raw, vm)
-                merged = pd.concat([store, raw], ignore_index=True)
-                save_store(merged)
-                st.success(f"Ingested {len(raw):,} rows from {getattr(up, 'name', 'upload.xlsx')}.")
-                store = load_store()
+        if st.button("Ingest upload(s)", disabled=(not uploads)):
+            if uploads:
+                all_raw = []
+                uploaded_names = []
+
+                for up in uploads:
+                    raw = read_weekly_workbook(up, int(year))
+                    all_raw.append(raw)
+                    uploaded_names.append(getattr(up, "name", "upload.xlsx"))
+
+                raw_merged = pd.concat(all_raw, ignore_index=True) if all_raw else pd.DataFrame()
+                if raw_merged.empty:
+                    st.info("No rows were ingested from the selected upload(s).")
+                else:
+                    _ = enrich_sales(raw_merged, vm)
+                    merged = pd.concat([store, raw_merged], ignore_index=True)
+                    save_store(merged)
+                    st.success(
+                        f"Ingested {len(raw_merged):,} rows from {len(uploaded_names)} file(s): "
+                        + ", ".join(uploaded_names)
+                    )
+                    store = load_store()
 
         st.divider()
         st.header("Filters")

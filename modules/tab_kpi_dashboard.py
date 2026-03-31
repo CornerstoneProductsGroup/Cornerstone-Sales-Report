@@ -1060,8 +1060,8 @@ def _prepare_top_movers(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> l
 
     movers = pd.concat(
         [
-            combined.sort_values("Delta", ascending=False).head(3),
-            combined.sort_values("Delta", ascending=True).head(3),
+            combined.sort_values("Delta", ascending=False).head(4),
+            combined.sort_values("Delta", ascending=True).head(4),
         ],
         ignore_index=True,
     )
@@ -1083,7 +1083,7 @@ def _prepare_top_movers(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> l
                 "Color": _delta_color(delta),
             }
         )
-        if len(rows) == 6:
+        if len(rows) == 7:
             break
     return rows
 

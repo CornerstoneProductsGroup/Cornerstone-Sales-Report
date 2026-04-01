@@ -20,6 +20,7 @@ from .shared_core import (
     new_placement,
 )
 from . import tab_kpi_dashboard
+from .app_core import make_simple_data_pdf
 
 
 def render(ctx: dict):
@@ -541,6 +542,29 @@ def render(ctx: dict):
 
     st.divider()
     st.header("Strategic Intelligence")
+
+    try:
+        export_df = dfA[["Retailer", "Vendor", "SKU", "Sales", "Units"]].copy() if not dfA.empty else pd.DataFrame()
+        if not export_df.empty:
+            export_df = export_df.groupby(["Retailer", "Vendor", "SKU"], as_index=False).agg(
+                Sales=("Sales", "sum"),
+                Units=("Units", "sum"),
+            )
+        pdf_bytes = make_simple_data_pdf(
+            title=f"Standard Intelligence Report — {a_lbl}",
+            subtitle=f"Filtered by selection",
+            data_df=export_df,
+        )
+        if pdf_bytes:
+            st.download_button(
+                "⬇️ Download PDF",
+                data=pdf_bytes,
+                file_name=f"standard_intelligence_{a_lbl.replace(' ', '_').lower()}.pdf",
+                mime="application/pdf",
+                key="download_std_intel_pdf",
+            )
+    except Exception:
+        pass
 
     st.subheader("1) Contribution Tree (Where did change come from?)")
     if compare_mode == "None":

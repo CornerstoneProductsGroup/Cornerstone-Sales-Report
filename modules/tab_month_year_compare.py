@@ -18,6 +18,7 @@ from .shared_core import (
     top_two_card,
     biggest_increase_card,
 )
+from .app_core import make_simple_data_pdf
 
 
 def render(ctx: dict):
@@ -1239,6 +1240,29 @@ def render_standard_view(
     with d3:
         if decS:
             biggest_increase_card("SKU w/ Biggest Decrease", decS[0], decS[1], decS[2])
+
+    try:
+        export_df = dfA[["Retailer", "Vendor", "SKU", "Sales", "Units"]].copy() if not dfA.empty else pd.DataFrame()
+        if not export_df.empty:
+            export_df = export_df.groupby(["Retailer", "Vendor", "SKU"], as_index=False).agg(
+                Sales=("Sales", "sum"),
+                Units=("Units", "sum"),
+            )
+        pdf_bytes = make_simple_data_pdf(
+            title=f"Month/Year Compare Report — {a_lbl} vs {b_lbl}",
+            subtitle=f"Compare Mode: {compare_mode}",
+            data_df=export_df,
+        )
+        if pdf_bytes:
+            st.download_button(
+                "⬇️ Download PDF",
+                data=pdf_bytes,
+                file_name=f"month_year_compare_{a_lbl}_{b_lbl}.pdf".replace(" ", "_").lower(),
+                mime="application/pdf",
+                key="download_myc_pdf",
+            )
+    except Exception:
+        pass
 
     st.divider()
     st.subheader("Current Only / Compare Only Activity")

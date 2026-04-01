@@ -8134,3 +8134,87 @@ def run_app():
     render_tab_data_mgmt()
 
     render_tab_year_summary()
+
+
+def make_simple_data_pdf(title: str, subtitle: str, data_df: pd.DataFrame) -> bytes:
+    """Generate a simple PDF with filtered data in table format."""
+    try:
+        from io import BytesIO
+        from reportlab.lib.pagesizes import letter, landscape
+        from reportlab.lib.units import inch
+        from reportlab.lib import colors
+        from reportlab.platypus import (
+            SimpleDocTemplate,
+            Paragraph,
+            Spacer,
+            Table,
+            TableStyle,
+        )
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    except Exception:
+        return b""
+
+    if data_df is None or data_df.empty:
+        return b""
+
+    try:
+        buf = BytesIO()
+        doc = SimpleDocTemplate(
+            buf,
+            pagesize=landscape(letter),
+            leftMargin=0.5 * inch,
+            rightMargin=0.5 * inch,
+            topMargin=0.6 * inch,
+            bottomMargin=0.6 * inch,
+        )
+        styles = getSampleStyleSheet()
+        if "H1" not in styles:
+            styles.add(ParagraphStyle(name="H1", parent=styles["Heading1"], fontSize=14, leading=16, spaceAfter=6))
+        if "H2" not in styles:
+            styles.add(ParagraphStyle(name="H2", parent=styles["Heading2"], fontSize=10, leading=12, spaceAfter=4))
+
+        story = []
+
+        header_text = f"<b>{html.escape(str(title))}</b>"
+        if subtitle:
+            header_text += f"<br/><font size=8 color='#6b7280'>{html.escape(str(subtitle))}</font>"
+        story.append(Paragraph(header_text, styles["H1"]))
+        story.append(Spacer(1, 0.15 * inch))
+
+        disp = data_df.copy()
+        for col in disp.columns:
+            cn_lower = str(col).lower()
+            num_data = pd.to_numeric(disp[col], errors="coerce")
+            if not num_data.notna().any():
+                disp[col] = disp[col].astype(str)
+                continue
+            if "sales" in cn_lower or "revenue" in cn_lower:
+                disp[col] = num_data.apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "—")
+            elif "units" in cn_lower or "qty" in cn_lower or "unit" in cn_lower:
+                disp[col] = num_data.apply(lambda x: f"{int(round(x)):,}" if pd.notna(x) else "—")
+            else:
+                disp[col] = num_data.apply(lambda x: f"{x:,.2f}" if pd.notna(x) else "—")
+
+        table_data = [list(disp.columns.astype(str))] + disp.astype(str).values.tolist()
+        tbl = Table(table_data)
+        ts = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#111827")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 9),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9fafb")]),
+            ("FONTSIZE", (0, 1), (-1, -1), 8),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ]
+        tbl.setStyle(TableStyle(ts))
+        story.append(tbl)
+
+        doc.build(story)
+        return buf.getvalue()
+    except Exception:
+        return b""

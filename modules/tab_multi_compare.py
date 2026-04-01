@@ -27,6 +27,7 @@ from .shared_core import (
     filter_by_period_labels,
     kpi_card,
 )
+from .app_core import make_simple_data_pdf
 
 LINE_ACCENT = "#FF4FC3"
 RADAR_FILL = "#4CC9F0"
@@ -2177,6 +2178,29 @@ def render(ctx: dict):
 
     st.subheader("Multi Month / Year Compare")
     st.caption("Analyze multiple months or years together in one view.")
+
+    try:
+        export_df = df_scope[["Retailer", "Vendor", "SKU", "Sales", "Units"]].copy() if not df_scope.empty else pd.DataFrame()
+        if not export_df.empty:
+            export_df = export_df.groupby(["Retailer", "Vendor", "SKU"], as_index=False).agg(
+                Sales=("Sales", "sum"),
+                Units=("Units", "sum"),
+            )
+        pdf_bytes = make_simple_data_pdf(
+            title="Multi Month / Year Compare Report",
+            subtitle="Filtered selection across all dimensions",
+            data_df=export_df,
+        )
+        if pdf_bytes:
+            st.download_button(
+                "⬇️ Download PDF",
+                data=pdf_bytes,
+                file_name="multi_compare_report.pdf",
+                mime="application/pdf",
+                key="download_multicmp_pdf",
+            )
+    except Exception:
+        pass
 
     if df_scope.empty:
         st.info("No data available with the current filters.")

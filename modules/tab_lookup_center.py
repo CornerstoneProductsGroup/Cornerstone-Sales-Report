@@ -13,6 +13,7 @@ from .shared_core import (
     available_year_labels,
     filter_by_period_labels,
 )
+from .app_core import make_simple_data_pdf
 
 TIMEFRAME_OPTIONS = [
     "Last 4 weeks",
@@ -1000,6 +1001,29 @@ def render(ctx: dict):
         """,
         unsafe_allow_html=True,
     )
+
+    try:
+        export_df = df_sel[["Retailer", "Vendor", "SKU", "Sales", "Units"]].copy() if not df_sel.empty else pd.DataFrame()
+        if not export_df.empty:
+            export_df = export_df.groupby(["Retailer", "Vendor", "SKU"], as_index=False).agg(
+                Sales=("Sales", "sum"),
+                Units=("Units", "sum"),
+            )
+        pdf_bytes = make_simple_data_pdf(
+            title=f"Lookup Center Report — {lookup_type}",
+            subtitle=f"{label_preview} • {timeframe} •{period[0].date()} to {period[1].date()}",
+            data_df=export_df,
+        )
+        if pdf_bytes:
+            st.download_button(
+                "⬇️ Download PDF",
+                data=pdf_bytes,
+                file_name=f"lookup_center_{lookup_type.lower()}_{timeframe.replace(' ', '_').lower()}.pdf",
+                mime="application/pdf",
+                key="download_lookup_pdf",
+            )
+    except Exception:
+        pass
 
     st.write("")
 

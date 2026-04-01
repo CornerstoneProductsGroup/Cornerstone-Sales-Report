@@ -625,6 +625,91 @@ def _render_advanced_compare_years(df_base: pd.DataFrame, metric: str, cur_years
         render_df(show, height=360)
 
 
+def _render_advanced_multi_year(df_base: pd.DataFrame, metric: str, selected_years: list):
+    """Render single-box multi-year analysis for selected years."""
+    if not selected_years:
+        st.info("Select one or more years to view the multi-year analysis.")
+        return
+
+    df_sel = filter_by_period_labels(df_base, selected_years, "Year")
+    if df_sel.empty:
+        st.info("No data available for the selected years.")
+        return
+
+    k_sel = calc_kpis(df_sel)
+
+    st.markdown("#### Selected Years Summary")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        _render_kpi_card("Total Sales", money(k_sel["Sales"]))
+    with c2:
+        _render_kpi_card("Total Units", f"{k_sel['Units']:,.0f}")
+    with c3:
+        _render_kpi_card("Total ASP", money(k_sel["ASP"]))
+
+    st.caption(f"Years: {', '.join(selected_years)}")
+
+    year_summary = (
+        df_sel.groupby("Year", as_index=False)
+        .agg(
+            Sales=("Sales", "sum"),
+            Units=("Units", "sum"),
+        )
+        .sort_values("Year", ascending=True)
+        .reset_index(drop=True)
+    )
+    year_summary["ASP"] = np.where(year_summary["Units"] != 0, year_summary["Sales"] / year_summary["Units"], 0.0)
+
+    show_year = year_summary.copy()
+    show_year["Year"] = show_year["Year"].astype(str)
+    show_year["Sales"] = show_year["Sales"].map(money)
+    show_year["Units"] = show_year["Units"].map(lambda v: f"{v:,.0f}")
+    show_year["ASP"] = show_year["ASP"].map(money)
+
+    st.markdown("#### Year Breakdown")
+    render_df(show_year, height=260)
+
+    if "Retailer" in df_sel.columns:
+        retailer_year = (
+            df_sel.groupby(["Retailer", "Year"], as_index=False)
+            .agg(Value=(metric, "sum"))
+        )
+        if not retailer_year.empty:
+            retailer_piv = retailer_year.pivot_table(
+                index="Retailer",
+                columns="Year",
+                values="Value",
+                aggfunc="sum",
+                fill_value=0.0,
+            ).reset_index()
+
+            selected_year_nums = []
+            for y in selected_years:
+                try:
+                    selected_year_nums.append(int(y))
+                except Exception:
+                    continue
+
+            ordered_year_cols = [y for y in selected_year_nums if y in retailer_piv.columns]
+            if ordered_year_cols:
+                retailer_piv["Total"] = retailer_piv[ordered_year_cols].sum(axis=1)
+                retailer_piv["Average"] = retailer_piv[ordered_year_cols].mean(axis=1)
+            else:
+                retailer_piv["Total"] = 0.0
+                retailer_piv["Average"] = 0.0
+
+            retailer_piv = retailer_piv.sort_values("Total", ascending=False).reset_index(drop=True)
+
+            col_order = ["Retailer"] + ordered_year_cols + ["Total", "Average"]
+            show_retailer = retailer_piv[col_order].copy() if all(c in retailer_piv.columns for c in col_order) else retailer_piv.copy()
+
+            for c in [x for x in show_retailer.columns if x != "Retailer"]:
+                show_retailer[c] = show_retailer[c].map(lambda v: _fmt_num(v, metric))
+
+            st.markdown(f"#### Retailer Breakdown ({metric})")
+            render_df(show_retailer, height=360)
+
+
 def _render_compare_section(df_base: pd.DataFrame, metric: str, default_period):
     st.markdown("### Compare")
 
@@ -995,20 +1080,12 @@ def render(ctx: dict):
         
     else:  # Years
         year_options = list(reversed(available_year_labels(df_lookup_all)))
-        ac_col_y1, ac_col_y2 = st.columns(2)
-        with ac_col_y1:
-            ac_cur_years = st.multiselect(
-                "Current year(s)",
-                options=year_options,
-                default=year_options[0:1] if year_options else [],
-                key="advanced_compare_cur_years",
-            )
-        with ac_col_y2:
-            ac_cmp_years = st.multiselect(
-                "Compare year(s)",
-                options=year_options,
-                default=year_options[1:2] if len(year_options) > 1 else [],
-                key="advanced_compare_cmp_years",
-            )
-        
-        _render_advanced_compare_years(df_lookup_all, ac_metric, ac_cur_years, ac_cmp_years)
+        default_years = year_options[:4] if len(year_options) >= 4 else year_options
+        ac_selected_years = st.multiselect(
+            "Select year(s)",
+            options=year_options,
+            default=default_years,
+            key="advanced_compare_selected_years",
+        )
+
+        _render_advanced_multi_year(df_lookup_all, ac_metric, ac_selected_years)

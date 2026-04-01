@@ -962,9 +962,14 @@ def render(ctx: dict):
             index=2,
             key="advanced_compare_weeks",
         )
-        # Create a period based on weeks
-        end_date = pd.Timestamp.now()
-        start_date = end_date - pd.Timedelta(weeks=ac_weeks)
+        # Anchor the compare window to the latest week in the selected lookup data.
+        week_end = pd.to_datetime(df_lookup_all.get("WeekEnd"), errors="coerce").dropna()
+        if week_end.empty:
+            st.info("No week-ending dates are available for advanced compare.")
+            return
+
+        end_date = week_end.max().normalize()
+        start_date = end_date - pd.Timedelta(days=7 * int(ac_weeks) - 1)
         ac_period = (start_date, end_date)
         _render_compare_section(df_lookup_all, ac_metric, ac_period)
         

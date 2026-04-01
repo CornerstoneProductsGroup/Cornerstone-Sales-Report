@@ -1002,29 +1002,6 @@ def render(ctx: dict):
         unsafe_allow_html=True,
     )
 
-    try:
-        export_df = df_sel[["Retailer", "Vendor", "SKU", "Sales", "Units"]].copy() if not df_sel.empty else pd.DataFrame()
-        if not export_df.empty:
-            export_df = export_df.groupby(["Retailer", "Vendor", "SKU"], as_index=False).agg(
-                Sales=("Sales", "sum"),
-                Units=("Units", "sum"),
-            )
-        pdf_bytes = make_simple_data_pdf(
-            title=f"Lookup Center Report — {lookup_type}",
-            subtitle=f"{label_preview} • {timeframe} •{period[0].date()} to {period[1].date()}",
-            data_df=export_df,
-        )
-        if pdf_bytes:
-            st.download_button(
-                "⬇️ Download PDF",
-                data=pdf_bytes,
-                file_name=f"lookup_center_{lookup_type.lower()}_{timeframe.replace(' ', '_').lower()}.pdf",
-                mime="application/pdf",
-                key="download_lookup_pdf",
-            )
-    except Exception:
-        pass
-
     st.write("")
 
     st.markdown("### Quick Intelligence Summary")
@@ -1139,3 +1116,33 @@ def render(ctx: dict):
                 )
 
             _render_advanced_compare_years(df_lookup_all, ac_metric, ac_cur_years, ac_cmp_years)
+
+    st.divider()
+    try:
+        if lookup_type == "SKU":
+            export_df = df_sel[["Retailer", "Vendor", "Sales", "Units"]].copy() if not df_sel.empty else pd.DataFrame()
+            group_by = ["Retailer", "Vendor"]
+        elif lookup_type == "Vendor":
+            export_df = df_sel[["Retailer", "SKU", "Sales", "Units"]].copy() if not df_sel.empty else pd.DataFrame()
+            group_by = ["Retailer", "SKU"]
+        else:  # Retailer
+            export_df = df_sel[["Vendor", "SKU", "Sales", "Units"]].copy() if not df_sel.empty else pd.DataFrame()
+            group_by = ["Vendor", "SKU"]
+        
+        if not export_df.empty:
+            export_df = export_df.groupby(group_by, as_index=False).agg(Sales=("Sales", "sum"), Units=("Units", "sum"))
+            pdf_bytes = make_simple_data_pdf(
+                title=f"Lookup Center — {lookup_type} Analysis",
+                subtitle=f"{label_preview} • {timeframe} • {period[0].date()} to {period[1].date()}",
+                data_df=export_df,
+            )
+            if pdf_bytes:
+                st.download_button(
+                    "⬇️ Download Lookup PDF",
+                    data=pdf_bytes,
+                    file_name=f"lookup_center_{lookup_type.lower()}_{timeframe.replace(' ', '_').lower()}.pdf",
+                    mime="application/pdf",
+                    key="download_lookup_pdf_bottom",
+                )
+    except Exception:
+        pass

@@ -543,29 +543,6 @@ def render(ctx: dict):
     st.divider()
     st.header("Strategic Intelligence")
 
-    try:
-        export_df = dfA[["Retailer", "Vendor", "SKU", "Sales", "Units"]].copy() if not dfA.empty else pd.DataFrame()
-        if not export_df.empty:
-            export_df = export_df.groupby(["Retailer", "Vendor", "SKU"], as_index=False).agg(
-                Sales=("Sales", "sum"),
-                Units=("Units", "sum"),
-            )
-        pdf_bytes = make_simple_data_pdf(
-            title=f"Standard Intelligence Report — {a_lbl}",
-            subtitle=f"Filtered by selection",
-            data_df=export_df,
-        )
-        if pdf_bytes:
-            st.download_button(
-                "⬇️ Download PDF",
-                data=pdf_bytes,
-                file_name=f"standard_intelligence_{a_lbl.replace(' ', '_').lower()}.pdf",
-                mime="application/pdf",
-                key="download_std_intel_pdf",
-            )
-    except Exception:
-        pass
-
     st.subheader("1) Contribution Tree (Where did change come from?)")
     if compare_mode == "None":
         st.info("Select a comparison mode to use the contribution tree.")
@@ -777,6 +754,28 @@ def render(ctx: dict):
                 render_df(odf, height=420) if not odf.empty else st.caption(
                     "No signals found with current filters/thresholds."
                 )
+
+    st.divider()
+    try:
+        if compare_mode != "None":
+            drv = drivers(dfA, dfB, driver_level)
+            drv_export = drv.copy()
+            if not drv_export.empty:
+                pdf_bytes = make_simple_data_pdf(
+                    title=f"Standard Intelligence Drivers — {a_lbl} vs {b_lbl}",
+                    subtitle=f"Contribution analysis by {driver_level}",
+                    data_df=drv_export[[driver_level, "Sales_A", "Sales_B", "Sales_Δ", "Contribution_%"]],
+                )
+                if pdf_bytes:
+                    st.download_button(
+                        "⬇️ Download Drivers PDF",
+                        data=pdf_bytes,
+                        file_name=f"standard_intelligence_drivers_{a_lbl}_{b_lbl}.pdf".replace(" ", "_").lower(),
+                        mime="application/pdf",
+                        key="download_std_drivers_pdf",
+                    )
+    except Exception:
+        pass
 
 def render_visual_only(ctx: dict):
     dfA = ctx["dfA"]

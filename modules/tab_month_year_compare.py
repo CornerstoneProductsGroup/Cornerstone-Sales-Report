@@ -1241,29 +1241,6 @@ def render_standard_view(
         if decS:
             biggest_increase_card("SKU w/ Biggest Decrease", decS[0], decS[1], decS[2])
 
-    try:
-        export_df = dfA[["Retailer", "Vendor", "SKU", "Sales", "Units"]].copy() if not dfA.empty else pd.DataFrame()
-        if not export_df.empty:
-            export_df = export_df.groupby(["Retailer", "Vendor", "SKU"], as_index=False).agg(
-                Sales=("Sales", "sum"),
-                Units=("Units", "sum"),
-            )
-        pdf_bytes = make_simple_data_pdf(
-            title=f"Month/Year Compare Report — {a_lbl} vs {b_lbl}",
-            subtitle=f"Compare Mode: {compare_mode}",
-            data_df=export_df,
-        )
-        if pdf_bytes:
-            st.download_button(
-                "⬇️ Download PDF",
-                data=pdf_bytes,
-                file_name=f"month_year_compare_{a_lbl}_{b_lbl}.pdf".replace(" ", "_").lower(),
-                mime="application/pdf",
-                key="download_myc_pdf",
-            )
-    except Exception:
-        pass
-
     st.divider()
     st.subheader("Current Only / Compare Only Activity")
 
@@ -1380,3 +1357,25 @@ def render_standard_view(
             render_df(dec[["SKU", f"Sales ({a_lbl})", f"Sales ({b_lbl})", "Difference", "% Change"]], height=360)
         else:
             st.caption("None.")
+
+    st.divider()
+    try:
+        inc_raw = m[m["Difference"] > 0].sort_values("Difference", ascending=False).head(15).copy()
+        dec_raw = m[m["Difference"] < 0].sort_values("Difference", ascending=True).head(15).copy()
+        movers_raw = pd.concat([inc_raw, dec_raw], ignore_index=True) if not inc_raw.empty or not dec_raw.empty else pd.DataFrame()
+        if not movers_raw.empty:
+            pdf_bytes = make_simple_data_pdf(
+                title=f"Month/Year Compare Movers — {a_lbl} vs {b_lbl}",
+                subtitle=f"Top Increasing and Declining SKUs by Sales Difference",
+                data_df=movers_raw[["SKU", "Sales_A", "Sales_B", "Difference", "% Change"]],
+            )
+            if pdf_bytes:
+                st.download_button(
+                    "⬇️ Download Movers PDF",
+                    data=pdf_bytes,
+                    file_name=f"month_year_compare_movers_{a_lbl}_{b_lbl}.pdf".replace(" ", "_").lower(),
+                    mime="application/pdf",
+                    key="download_myc_movers_pdf",
+                )
+    except Exception:
+        pass

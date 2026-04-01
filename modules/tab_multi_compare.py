@@ -2179,29 +2179,6 @@ def render(ctx: dict):
     st.subheader("Multi Month / Year Compare")
     st.caption("Analyze multiple months or years together in one view.")
 
-    try:
-        export_df = df_scope[["Retailer", "Vendor", "SKU", "Sales", "Units"]].copy() if not df_scope.empty else pd.DataFrame()
-        if not export_df.empty:
-            export_df = export_df.groupby(["Retailer", "Vendor", "SKU"], as_index=False).agg(
-                Sales=("Sales", "sum"),
-                Units=("Units", "sum"),
-            )
-        pdf_bytes = make_simple_data_pdf(
-            title="Multi Month / Year Compare Report",
-            subtitle="Filtered selection across all dimensions",
-            data_df=export_df,
-        )
-        if pdf_bytes:
-            st.download_button(
-                "⬇️ Download PDF",
-                data=pdf_bytes,
-                file_name="multi_compare_report.pdf",
-                mime="application/pdf",
-                key="download_multicmp_pdf",
-            )
-    except Exception:
-        pass
-
     if df_scope.empty:
         st.info("No data available with the current filters.")
         return
@@ -2270,3 +2247,23 @@ def render(ctx: dict):
     _render_share_of_total_table(df_scope, ordered_labels, granularity, row_dim, metric)
     _render_multi_year_seasonality(df_scope, ordered_labels, granularity, metric)
     _render_performance_score(df_scope, ordered_labels, granularity, row_dim, metric)
+
+    st.divider()
+    try:
+        matrix_data = _build_matrix(df_scope, ordered_labels, granularity, row_dim, metric)
+        if not matrix_data.empty:
+            pdf_bytes = make_simple_data_pdf(
+                title=f"Multi Compare Matrix — {granularity}",
+                subtitle=f"Analysis by {row_dim} for {', '.join(ordered_labels[:5])}{'...' if len(ordered_labels) > 5 else ''}",
+                data_df=matrix_data,
+            )
+            if pdf_bytes:
+                st.download_button(
+                    "⬇️ Download Matrix PDF",
+                    data=pdf_bytes,
+                    file_name=f"multi_compare_matrix_{granularity.lower()}.pdf",
+                    mime="application/pdf",
+                    key="download_multicmp_matrix_pdf",
+                )
+    except Exception:
+        pass

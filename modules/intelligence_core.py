@@ -307,23 +307,38 @@ def run_app():
         scope_pick = None
 
         if scope == "Retailer":
-            scope_pick = st.multiselect(
-                "Retailer(s)",
-                options=sorted(df_all["Retailer"].dropna().unique()) if "Retailer" in df_all.columns else [],
-                default=[],
-            )
+            all_retailers = sorted(df_all["Retailer"].dropna().unique()) if "Retailer" in df_all.columns else []
+            select_all_retailer = st.checkbox("Select All Retailers", value=False, key="select_all_retailers")
+            if select_all_retailer:
+                scope_pick = all_retailers
+            else:
+                scope_pick = st.multiselect(
+                    "Retailer(s)",
+                    options=all_retailers,
+                    default=[],
+                )
         elif scope == "Vendor":
-            scope_pick = st.multiselect(
-                "Vendor(s)",
-                options=sorted(df_all["Vendor"].dropna().unique()) if "Vendor" in df_all.columns else [],
-                default=[],
-            )
+            all_vendors = sorted(df_all["Vendor"].dropna().unique()) if "Vendor" in df_all.columns else []
+            select_all_vendor = st.checkbox("Select All Vendors", value=False, key="select_all_vendors")
+            if select_all_vendor:
+                scope_pick = all_vendors
+            else:
+                scope_pick = st.multiselect(
+                    "Vendor(s)",
+                    options=all_vendors,
+                    default=[],
+                )
         elif scope == "SKU":
-            scope_pick = st.multiselect(
-                "SKU(s)",
-                options=sorted(df_all["SKU"].dropna().unique()) if "SKU" in df_all.columns else [],
-                default=[],
-            )
+            all_skus = sorted(df_all["SKU"].dropna().unique()) if "SKU" in df_all.columns else []
+            select_all_sku = st.checkbox("Select All SKUs", value=False, key="select_all_skus")
+            if select_all_sku:
+                scope_pick = all_skus
+            else:
+                scope_pick = st.multiselect(
+                    "SKU(s)",
+                    options=all_skus,
+                    default=[],
+                )
 
         analysis_view = st.radio(
             "Analysis View",

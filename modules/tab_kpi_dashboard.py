@@ -913,7 +913,7 @@ def _format_week_date(value) -> str:
     return ts.strftime("%Y-%m-%d")
 
 
-def _series_by_week(df: pd.DataFrame, metric: str = "Sales") -> pd.DataFrame:
+def _series_by_week(df: pd.DataFrame, metric: str = "Sales", last_n: int | None = None) -> pd.DataFrame:
     if df.empty or metric not in df.columns or "WeekEnd" not in df.columns:
         return pd.DataFrame(columns=["WeekIndex", "Week Label", "Value"])
 
@@ -923,27 +923,53 @@ def _series_by_week(df: pd.DataFrame, metric: str = "Sales") -> pd.DataFrame:
         .sort_values("WeekEnd")
         .reset_index(drop=True)
     )
-    weekly["WeekIndex"] = range(1, len(weekly) + 1)
+
+    if last_n is not None and last_n > 0:
+        weekly = weekly.tail(last_n).reset_index(drop=True)
+
+    if weekly.empty:
+        return pd.DataFrame(columns=["WeekIndex", "Week Label", "Value"])
+
+    if last_n is not None and last_n > 0:
+        start_idx = max(1, last_n - len(weekly) + 1)
+    else:
+        start_idx = 1
+
+    weekly["WeekIndex"] = range(start_idx, start_idx + len(weekly))
     weekly["Week Label"] = weekly["WeekIndex"].map(lambda idx: f"Week {idx}")
     return weekly[["WeekIndex", "Week Label", "Value"]]
 
 
 def _prepare_weekly_trend(df_current: pd.DataFrame, df_compare: pd.DataFrame, current_label: str, compare_label: str | None) -> pd.DataFrame:
-    current_weekly = _series_by_week(df_current, "Sales")
-    compare_weekly = _series_by_week(df_compare, "Sales")
-    max_len = max(len(current_weekly), len(compare_weekly))
-    if max_len == 0:
+    target_weeks = 8
+    current_weekly = _series_by_week(df_current, "Sales", last_n=target_weeks)
+    compare_weekly = _series_by_week(df_compare, "Sales", last_n=target_weeks)
+    if current_weekly.empty and (compare_weekly.empty or not compare_label):
         return pd.DataFrame(columns=["Week Label", "Series", "Sales"])
 
     current_lookup = dict(zip(current_weekly["WeekIndex"], current_weekly["Value"]))
     compare_lookup = dict(zip(compare_weekly["WeekIndex"], compare_weekly["Value"]))
 
     rows: list[dict[str, object]] = []
-    for idx in range(1, max_len + 1):
+    for idx in range(1, target_weeks + 1):
         week_label = f"Week {idx}"
-        rows.append({"Week Label": week_label, "Series": current_label, "Sales": float(current_lookup.get(idx, 0.0))})
+        current_value = current_lookup.get(idx)
+        rows.append(
+            {
+                "Week Label": week_label,
+                "Series": current_label,
+                "Sales": float(current_value) if current_value is not None else float("nan"),
+            }
+        )
         if compare_label:
-            rows.append({"Week Label": week_label, "Series": compare_label, "Sales": float(compare_lookup.get(idx, 0.0))})
+            compare_value = compare_lookup.get(idx)
+            rows.append(
+                {
+                    "Week Label": week_label,
+                    "Series": compare_label,
+                    "Sales": float(compare_value) if compare_value is not None else float("nan"),
+                }
+            )
     return pd.DataFrame(rows)
 
 

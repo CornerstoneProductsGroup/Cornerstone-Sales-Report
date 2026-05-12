@@ -363,6 +363,23 @@ def render(ctx: dict):
     if d_all.empty:
         st.caption("No rows match the current thresholds.")
     else:
+        hide_options = sorted(d_all[pivot_dim].dropna().astype(str).unique().tolist())
+        hide_key = f"std_weekly_hidden_{pivot_dim.lower()}"
+        hidden_entities = st.multiselect(
+            f"Hide {pivot_dim}(s) from Weekly Detail",
+            options=hide_options,
+            default=[],
+            key=hide_key,
+            help="Hidden rows are removed from the table and totals until you unselect them.",
+        )
+
+        if hidden_entities:
+            d_all = d_all[~d_all[pivot_dim].astype(str).isin(hidden_entities)].copy()
+            st.caption(f"Hidden {len(hidden_entities)} {pivot_dim.lower()}(s) from this view.")
+
+        if d_all.empty:
+            st.caption("All rows are hidden for this view. Unselect one or more hidden items to restore them.")
+
         wk_metric = d_all.groupby([pivot_dim, "WeekEnd"], as_index=False).agg(Value=(weekly_metric, "sum"))
         wk_metric["WeekEnd"] = pd.to_datetime(wk_metric["WeekEnd"], errors="coerce")
         wk_metric = wk_metric[wk_metric["WeekEnd"].notna()].copy()

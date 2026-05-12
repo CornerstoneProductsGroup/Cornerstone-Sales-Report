@@ -992,8 +992,31 @@ def _prepare_top_skus(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> pd.
     return merged
 
 
+def _build_other_breakdown_text(
+    df: pd.DataFrame,
+    name_col: str,
+    total_col: str,
+    diff_col: str,
+    total_fmt,
+    diff_fmt,
+) -> str:
+    if df.empty:
+        return ""
+
+    lines: list[str] = []
+    ordered = df.sort_values(total_col, ascending=False)
+    for _, row in ordered.iterrows():
+        name = str(row.get(name_col, ""))
+        total_val = float(row.get(total_col, 0.0))
+        diff_val = float(row.get(diff_col, 0.0))
+        lines.append(f"{name} | {total_fmt(total_val)} | {diff_fmt(diff_val)}")
+    return "\n".join(lines)
+
+
 def _prepare_retailer_share(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> pd.DataFrame:
-    cols = ["Retailer", "Sales", "CompareSales", "Delta", "Color", "SalesLabel", "DeltaLabel", "DeltaX", "SalesX"]
+    cols = [
+        "Retailer", "Sales", "CompareSales", "Delta", "Color", "SalesLabel", "DeltaLabel", "DeltaX", "SalesX", "OtherBreakdown",
+    ]
     if df_current.empty or "Retailer" not in df_current.columns:
         return pd.DataFrame(columns=cols)
 
@@ -1010,13 +1033,25 @@ def _prepare_retailer_share(df_current: pd.DataFrame, df_compare: pd.DataFrame) 
     )
     merged = current.merge(compare, on="Retailer", how="outer").fillna(0.0)
     merged = merged.sort_values("Sales", ascending=False).reset_index(drop=True)
+    merged["OtherBreakdown"] = ""
 
     if len(merged) > 5:
+        others = merged.iloc[5:].copy()
+        others["Delta"] = others["Sales"] - others["CompareSales"]
+        other_breakdown = _build_other_breakdown_text(
+            others,
+            name_col="Retailer",
+            total_col="Sales",
+            diff_col="Delta",
+            total_fmt=money,
+            diff_fmt=_fmt_signed_money,
+        )
         top = merged.head(5).copy()
         top.loc[len(top)] = {
             "Retailer": "Other",
             "Sales": float(merged.iloc[5:]["Sales"].sum()),
             "CompareSales": float(merged.iloc[5:]["CompareSales"].sum()),
+            "OtherBreakdown": other_breakdown,
         }
         merged = top
 
@@ -1031,7 +1066,7 @@ def _prepare_retailer_share(df_current: pd.DataFrame, df_compare: pd.DataFrame) 
 
 
 def _prepare_retailer_share_change(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> pd.DataFrame:
-    cols = ["Retailer", "CurrentShare", "CompareShare", "Delta", "DeltaText", "DeltaColor", "ShareLabel"]
+    cols = ["Retailer", "CurrentShare", "CompareShare", "Delta", "DeltaText", "DeltaColor", "ShareLabel", "OtherBreakdown"]
     if df_current.empty or "Retailer" not in df_current.columns:
         return pd.DataFrame(columns=cols)
 
@@ -1048,12 +1083,39 @@ def _prepare_retailer_share_change(df_current: pd.DataFrame, df_compare: pd.Data
     )
 
     merged = cur.merge(cmp, on="Retailer", how="outer").fillna(0.0)
+    merged = merged.sort_values("Sales", ascending=False).reset_index(drop=True)
     cur_total = float(merged["Sales"].sum()) or 1.0
     cmp_total = float(merged["CompareSales"].sum()) or 1.0
     merged["CurrentShare"] = (merged["Sales"] / cur_total) * 100.0
     merged["CompareShare"] = (merged["CompareSales"] / cmp_total) * 100.0
     merged["Delta"] = merged["CurrentShare"] - merged["CompareShare"]
-    merged = merged.sort_values("CurrentShare", ascending=False).head(8).copy()
+    merged["OtherBreakdown"] = ""
+
+    if len(merged) > 7:
+        others = merged.iloc[7:].copy()
+        other_breakdown = _build_other_breakdown_text(
+            others,
+            name_col="Retailer",
+            total_col="CurrentShare",
+            diff_col="Delta",
+            total_fmt=lambda v: f"{v:.1f}%",
+            diff_fmt=lambda v: f"{v:+.1f}%",
+        )
+        top = merged.head(7).copy()
+        top.loc[len(top)] = {
+            "Retailer": "Other",
+            "Sales": float(others["Sales"].sum()),
+            "CompareSales": float(others["CompareSales"].sum()),
+            "CurrentShare": float(others["CurrentShare"].sum()),
+            "CompareShare": float(others["CompareShare"].sum()),
+            "Delta": float(others["Delta"].sum()),
+            "OtherBreakdown": other_breakdown,
+        }
+        merged = top
+    else:
+        merged = merged.head(8).copy()
+
+    merged = merged.sort_values("CurrentShare", ascending=False).copy()
     merged["DeltaColor"] = merged["Delta"].apply(_delta_color)
 
     def _delta_text(value: float) -> str:
@@ -1069,7 +1131,9 @@ def _prepare_retailer_share_change(df_current: pd.DataFrame, df_compare: pd.Data
 
 
 def _prepare_vendor_share(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> pd.DataFrame:
-    cols = ["Vendor", "Sales", "CompareSales", "Delta", "Color", "SalesLabel", "DeltaLabel", "DeltaX", "SalesX"]
+    cols = [
+        "Vendor", "Sales", "CompareSales", "Delta", "Color", "SalesLabel", "DeltaLabel", "DeltaX", "SalesX", "OtherBreakdown",
+    ]
     if df_current.empty or "Vendor" not in df_current.columns:
         return pd.DataFrame(columns=cols)
 
@@ -1086,13 +1150,25 @@ def _prepare_vendor_share(df_current: pd.DataFrame, df_compare: pd.DataFrame) ->
     )
     merged = current.merge(compare, on="Vendor", how="outer").fillna(0.0)
     merged = merged.sort_values("Sales", ascending=False).reset_index(drop=True)
+    merged["OtherBreakdown"] = ""
 
     if len(merged) > 7:
+        others = merged.iloc[7:].copy()
+        others["Delta"] = others["Sales"] - others["CompareSales"]
+        other_breakdown = _build_other_breakdown_text(
+            others,
+            name_col="Vendor",
+            total_col="Sales",
+            diff_col="Delta",
+            total_fmt=money,
+            diff_fmt=_fmt_signed_money,
+        )
         top = merged.head(7).copy()
         top.loc[len(top)] = {
             "Vendor": "Other",
             "Sales": float(merged.iloc[7:]["Sales"].sum()),
             "CompareSales": float(merged.iloc[7:]["CompareSales"].sum()),
+            "OtherBreakdown": other_breakdown,
         }
         merged = top
 
@@ -1107,7 +1183,7 @@ def _prepare_vendor_share(df_current: pd.DataFrame, df_compare: pd.DataFrame) ->
 
 
 def _prepare_vendor_share_change(df_current: pd.DataFrame, df_compare: pd.DataFrame) -> pd.DataFrame:
-    cols = ["Vendor", "CurrentShare", "CompareShare", "Delta", "DeltaText", "DeltaColor", "ShareLabel"]
+    cols = ["Vendor", "CurrentShare", "CompareShare", "Delta", "DeltaText", "DeltaColor", "ShareLabel", "OtherBreakdown"]
     if df_current.empty or "Vendor" not in df_current.columns:
         return pd.DataFrame(columns=cols)
 
@@ -1126,20 +1202,35 @@ def _prepare_vendor_share_change(df_current: pd.DataFrame, df_compare: pd.DataFr
     merged = cur.merge(cmp, on="Vendor", how="outer").fillna(0.0)
     merged = merged.sort_values("Sales", ascending=False).reset_index(drop=True)
 
-    if len(merged) > 7:
-        top = merged.head(7).copy()
-        top.loc[len(top)] = {
-            "Vendor": "Other",
-            "Sales": float(merged.iloc[7:]["Sales"].sum()),
-            "CompareSales": float(merged.iloc[7:]["CompareSales"].sum()),
-        }
-        merged = top
-
     cur_total = float(merged["Sales"].sum()) or 1.0
     cmp_total = float(merged["CompareSales"].sum()) or 1.0
     merged["CurrentShare"] = (merged["Sales"] / cur_total) * 100.0
     merged["CompareShare"] = (merged["CompareSales"] / cmp_total) * 100.0
     merged["Delta"] = merged["CurrentShare"] - merged["CompareShare"]
+    merged["OtherBreakdown"] = ""
+
+    if len(merged) > 7:
+        others = merged.iloc[7:].copy()
+        other_breakdown = _build_other_breakdown_text(
+            others,
+            name_col="Vendor",
+            total_col="CurrentShare",
+            diff_col="Delta",
+            total_fmt=lambda v: f"{v:.1f}%",
+            diff_fmt=lambda v: f"{v:+.1f}%",
+        )
+        top = merged.head(7).copy()
+        top.loc[len(top)] = {
+            "Vendor": "Other",
+            "Sales": float(others["Sales"].sum()),
+            "CompareSales": float(others["CompareSales"].sum()),
+            "CurrentShare": float(others["CurrentShare"].sum()),
+            "CompareShare": float(others["CompareShare"].sum()),
+            "Delta": float(others["Delta"].sum()),
+            "OtherBreakdown": other_breakdown,
+        }
+        merged = top
+
     merged = merged.sort_values("CurrentShare", ascending=False).copy()
     merged["DeltaColor"] = merged["Delta"].apply(_delta_color)
 
@@ -1554,6 +1645,7 @@ def _retailer_share_chart(df: pd.DataFrame):
                 alt.Tooltip("Retailer:N"),
                 alt.Tooltip("Sales:Q", format=",.0f"),
                 alt.Tooltip("Delta:Q", title="Difference", format=",.0f"),
+                alt.Tooltip("OtherBreakdown:N", title="Other Breakdown (Name | Total | Difference)"),
             ],
         )
     )
@@ -1596,6 +1688,7 @@ def _retailer_share_change_chart(df: pd.DataFrame):
                 alt.Tooltip("CurrentShare:Q", title="Current Share", format=",.1f"),
                 alt.Tooltip("CompareShare:Q", title="Compare Share", format=",.1f"),
                 alt.Tooltip("Delta:Q", title="Change", format=",.1f"),
+                alt.Tooltip("OtherBreakdown:N", title="Other Breakdown (Name | Share | Difference)"),
             ],
         )
     )
@@ -1636,6 +1729,7 @@ def _vendor_share_chart(df: pd.DataFrame):
                 alt.Tooltip("Vendor:N"),
                 alt.Tooltip("Sales:Q", format=",.0f"),
                 alt.Tooltip("Delta:Q", title="Difference", format=",.0f"),
+                alt.Tooltip("OtherBreakdown:N", title="Other Breakdown (Name | Total | Difference)"),
             ],
         )
     )
@@ -1678,6 +1772,7 @@ def _vendor_share_change_chart(df: pd.DataFrame):
                 alt.Tooltip("CurrentShare:Q", title="Current Share", format=",.1f"),
                 alt.Tooltip("CompareShare:Q", title="Compare Share", format=",.1f"),
                 alt.Tooltip("Delta:Q", title="Change", format=",.1f"),
+                alt.Tooltip("OtherBreakdown:N", title="Other Breakdown (Name | Share | Difference)"),
             ],
         )
     )

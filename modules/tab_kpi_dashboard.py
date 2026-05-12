@@ -1026,7 +1026,7 @@ def _prepare_retailer_share(df_current: pd.DataFrame, df_compare: pd.DataFrame) 
     merged["DeltaLabel"] = merged["Delta"].apply(_fmt_signed_money)
     max_sales = float(merged["Sales"].max()) if not merged.empty else 1.0
     merged["SalesX"] = merged["Sales"] + (max_sales * 0.015)
-    merged["DeltaX"] = merged["Sales"] + (max_sales * 0.125)
+    merged["DeltaX"] = merged["SalesX"]
     return merged[cols]
 
 
@@ -1102,7 +1102,7 @@ def _prepare_vendor_share(df_current: pd.DataFrame, df_compare: pd.DataFrame) ->
     merged["DeltaLabel"] = merged["Delta"].apply(_fmt_signed_money)
     max_sales = float(merged["Sales"].max()) if not merged.empty else 1.0
     merged["SalesX"] = merged["Sales"] + (max_sales * 0.015)
-    merged["DeltaX"] = merged["Sales"] + (max_sales * 0.125)
+    merged["DeltaX"] = merged["SalesX"]
     return merged[cols]
 
 

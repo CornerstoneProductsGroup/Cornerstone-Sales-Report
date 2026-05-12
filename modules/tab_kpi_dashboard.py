@@ -1559,7 +1559,7 @@ def _retailer_share_chart(df: pd.DataFrame):
     )
     sales_labels = (
         alt.Chart(df)
-        .mark_text(align="left", baseline="middle", dx=8, color="#1f2937", fontSize=13, fontWeight="bold")
+        .mark_text(align="left", baseline="middle", dx=8, dy=-7, color="#1f2937", fontSize=12, fontWeight="bold")
         .encode(
             y=alt.Y("Retailer:N", sort="-x", title=None),
             x=alt.X("SalesX:Q", scale=alt.Scale(domain=[0, x_max])),
@@ -1568,7 +1568,7 @@ def _retailer_share_chart(df: pd.DataFrame):
     )
     delta_labels = (
         alt.Chart(df)
-        .mark_text(align="left", baseline="middle", dx=8, fontSize=12, fontWeight="bold")
+        .mark_text(align="left", baseline="middle", dx=8, dy=8, fontSize=11, fontWeight="bold")
         .encode(
             y=alt.Y("Retailer:N", sort="-x", title=None),
             x=alt.X("DeltaX:Q", scale=alt.Scale(domain=[0, x_max])),
@@ -1601,7 +1601,7 @@ def _retailer_share_change_chart(df: pd.DataFrame):
     )
     share_text = (
         alt.Chart(df)
-        .mark_text(align="left", baseline="middle", dx=6, color="#1f2937", fontWeight="bold", fontSize=15)
+        .mark_text(align="left", baseline="middle", dx=6, dy=-7, color="#1f2937", fontWeight="bold", fontSize=12)
         .encode(
             y=alt.Y("Retailer:N", sort="-x", title=None),
             x=alt.X("CurrentShare:Q", scale=alt.Scale(domain=[0, x_max])),
@@ -1610,7 +1610,7 @@ def _retailer_share_change_chart(df: pd.DataFrame):
     )
     delta_text = (
         alt.Chart(df)
-        .mark_text(align="left", baseline="middle", dx=74, fontWeight="bold", fontSize=14)
+        .mark_text(align="left", baseline="middle", dx=6, dy=8, fontWeight="bold", fontSize=11)
         .encode(
             y=alt.Y("Retailer:N", sort="-x", title=None),
             x=alt.X("CurrentShare:Q", scale=alt.Scale(domain=[0, x_max])),
@@ -1641,7 +1641,7 @@ def _vendor_share_chart(df: pd.DataFrame):
     )
     sales_labels = (
         alt.Chart(df)
-        .mark_text(align="left", baseline="middle", dx=8, color="#1f2937", fontSize=13, fontWeight="bold")
+        .mark_text(align="left", baseline="middle", dx=8, dy=-7, color="#1f2937", fontSize=12, fontWeight="bold")
         .encode(
             y=alt.Y("Vendor:N", sort="-x", title=None),
             x=alt.X("SalesX:Q", scale=alt.Scale(domain=[0, x_max])),
@@ -1650,7 +1650,7 @@ def _vendor_share_chart(df: pd.DataFrame):
     )
     delta_labels = (
         alt.Chart(df)
-        .mark_text(align="left", baseline="middle", dx=8, fontSize=12, fontWeight="bold")
+        .mark_text(align="left", baseline="middle", dx=8, dy=8, fontSize=11, fontWeight="bold")
         .encode(
             y=alt.Y("Vendor:N", sort="-x", title=None),
             x=alt.X("DeltaX:Q", scale=alt.Scale(domain=[0, x_max])),
@@ -1683,7 +1683,7 @@ def _vendor_share_change_chart(df: pd.DataFrame):
     )
     share_text = (
         alt.Chart(df)
-        .mark_text(align="left", baseline="middle", dx=6, color="#1f2937", fontWeight="bold", fontSize=15)
+        .mark_text(align="left", baseline="middle", dx=6, dy=-7, color="#1f2937", fontWeight="bold", fontSize=12)
         .encode(
             y=alt.Y("Vendor:N", sort="-x", title=None),
             x=alt.X("CurrentShare:Q", scale=alt.Scale(domain=[0, x_max])),
@@ -1692,7 +1692,7 @@ def _vendor_share_change_chart(df: pd.DataFrame):
     )
     delta_text = (
         alt.Chart(df)
-        .mark_text(align="left", baseline="middle", dx=74, fontWeight="bold", fontSize=14)
+        .mark_text(align="left", baseline="middle", dx=6, dy=8, fontWeight="bold", fontSize=11)
         .encode(
             y=alt.Y("Vendor:N", sort="-x", title=None),
             x=alt.X("CurrentShare:Q", scale=alt.Scale(domain=[0, x_max])),

@@ -345,7 +345,7 @@ def render(ctx: dict):
             display_timeframe = st.selectbox(
                 "Display Time Frame",
                 options=["4 weeks", "8 weeks", "13 weeks", "26 weeks", "52 weeks", "All weeks"],
-                index=2,
+                index=1,
                 key="std_weekly_display_timeframe",
             )
 

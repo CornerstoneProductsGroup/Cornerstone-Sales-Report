@@ -1260,7 +1260,7 @@ def _build_new_product_lines(df_scope: pd.DataFrame, df_current: pd.DataFrame, m
     return lines[:3]
 
 
-def _build_exec_kpi_tiles(ctx: dict, sales_per_week: float, compare_sales_per_week: float, new_sku_count: int) -> dict[str, list[dict[str, object]]]:
+def _build_exec_kpi_tiles(ctx: dict, sales_per_week: float, compare_sales_per_week: float) -> dict[str, list[dict[str, object]]]:
     kA = ctx["kA"]
     kB = ctx["kB"]
     dfA = ctx.get("dfA", pd.DataFrame())
@@ -1747,25 +1747,10 @@ def render(ctx: dict):
     current_sales_per_week = float(kA.get("Sales", 0.0)) / current_weeks
     compare_sales_per_week = float(kB.get("Sales", 0.0)) / compare_weeks if compare_label else 0.0
 
-    anchor = pd.to_datetime(dfA.get("WeekEnd"), errors="coerce").max() if (not dfA.empty and "WeekEnd" in dfA.columns) else pd.NaT
-    if pd.notna(anchor) and not df_scope.empty and "WeekEnd" in df_scope.columns:
-        hist_up_to_anchor = df_scope[pd.to_datetime(df_scope["WeekEnd"], errors="coerce") <= anchor].copy()
-    else:
-        hist_up_to_anchor = pd.DataFrame()
-
-    overall_weekly = (
-        hist_up_to_anchor.groupby("WeekEnd", as_index=False).agg(Sales=("Sales", "sum")).sort_values("WeekEnd").tail(8)
-        if not hist_up_to_anchor.empty
-        else pd.DataFrame(columns=["WeekEnd", "Sales"])
-    )
-    period = period_from_df(dfA)
-    new_sku_count = len(first_sale_ever(df_scope, period)) if period is not None and not df_scope.empty else 0
-
     tiles = _build_exec_kpi_tiles(
         ctx,
         sales_per_week=current_sales_per_week,
         compare_sales_per_week=compare_sales_per_week,
-        new_sku_count=new_sku_count,
     )
     weekly_trend = _prepare_weekly_trend(dfA, dfB, current_label, compare_label)
     retailer_share = _prepare_retailer_share(dfA, dfB)

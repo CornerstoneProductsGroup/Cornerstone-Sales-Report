@@ -108,5 +108,14 @@ def apply_global_styles():
     div[data-testid="stDataFrame"] [data-testid="stTableBodyRow"]:hover {
         background-color:rgba(79, 172, 254, 0.08) !important;
     }
+
+    /* Keep Altair tooltip breakdown entries on separate rows */
+    .vega-tooltip td.value {
+        white-space: pre-line !important;
+        font-family: "Courier New", monospace;
+    }
+    .vega-tooltip {
+        max-width: 620px;
+    }
     </style>
     """, unsafe_allow_html=True)

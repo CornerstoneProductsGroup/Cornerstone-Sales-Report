@@ -123,6 +123,74 @@ def replace_store_rows_for_uploaded_weeks(existing: pd.DataFrame, new_rows: pd.D
     )
     return combined
 
+def read_missed_sales_file(uploaded_file) -> pd.DataFrame:
+    """Read a manual correction file with columns: Retailer, Vendor, SKU, Date, Quantity."""
+    name = getattr(uploaded_file, "name", "upload")
+    if name.lower().endswith(".csv"):
+        raw = pd.read_csv(uploaded_file)
+    else:
+        raw = pd.read_excel(uploaded_file, engine="openpyxl")
+
+    colmap = {str(c).strip().lower(): c for c in raw.columns}
+
+    def col(*names):
+        for n in names:
+            if n in colmap:
+                return colmap[n]
+        return None
+
+    c_ret = col("retailer")
+    c_ven = col("vendor")
+    c_sku = col("sku", "sku#", "skunumber", "sku number")
+    c_date = col("date", "sale date", "week date")
+    c_qty = col("quantity", "qty", "units")
+
+    missing = [n for n, c in [("Retailer", c_ret), ("SKU", c_sku), ("Date", c_date), ("Quantity", c_qty)] if c is None]
+    if missing:
+        raise ValueError(f"Missing required column(s): {', '.join(missing)}")
+
+    out = pd.DataFrame({
+        "Retailer": raw[c_ret].map(norm_retailer),
+        "Vendor": raw[c_ven].astype(str).str.strip() if c_ven else "",
+        "SKU": raw[c_sku].map(norm_sku),
+        "Date": pd.to_datetime(raw[c_date], errors="coerce"),
+        "Quantity": pd.to_numeric(raw[c_qty], errors="coerce"),
+    })
+    out = out[out["SKU"].astype(str).str.strip().ne("") & out["Date"].notna()]
+    return out.reset_index(drop=True)
+
+
+def match_weeks_for_dates(store: pd.DataFrame, dates: pd.Series) -> pd.DataFrame:
+    """Match each date to the existing store week (StartDate/EndDate) that contains it.
+    Returns a DataFrame with StartDate/EndDate columns aligned to `dates` (NaT where no week matches).
+    """
+    weeks = store[["StartDate", "EndDate"]].dropna().drop_duplicates().sort_values("StartDate").reset_index(drop=True)
+
+    starts, ends = [], []
+    for d in dates:
+        if pd.isna(d):
+            starts.append(pd.NaT)
+            ends.append(pd.NaT)
+            continue
+        hit = weeks[(weeks["StartDate"] <= d) & (weeks["EndDate"] >= d)]
+        if not hit.empty:
+            starts.append(hit.iloc[0]["StartDate"])
+            ends.append(hit.iloc[0]["EndDate"])
+        else:
+            starts.append(pd.NaT)
+            ends.append(pd.NaT)
+    return pd.DataFrame({"StartDate": starts, "EndDate": ends})
+
+
+def append_missed_sales_rows(store: pd.DataFrame, new_rows: pd.DataFrame) -> pd.DataFrame:
+    """Add missed-sale rows on top of the store without touching existing rows for that week."""
+    if new_rows is None or new_rows.empty:
+        return store
+    combined = pd.concat([store, new_rows], ignore_index=True)
+    combined = combined.drop_duplicates(subset=["Retailer", "SKU", "StartDate", "EndDate", "SourceFile"], keep="last")
+    return combined
+
+
 def load_vendor_map() -> pd.DataFrame:
     if not DEFAULT_VENDOR_MAP.exists():
         return pd.DataFrame(columns=["Retailer","SKU","Price","Vendor"])
@@ -983,6 +1051,94 @@ def render_data_management_center(vm: pd.DataFrame, store: pd.DataFrame):
                 st.success(f"Ingested {added_rows:,} rows from {len(uploads)} workbook(s).")
             except Exception as e:
                 st.error(f"Ingest failed: {e}")
+
+    st.markdown("---")
+    st.markdown("### Add Missed Sale(s)")
+    st.caption(
+        "Use this when a sale from a specific retailer/week wasn't captured in the original weekly upload. "
+        "Upload a spreadsheet with columns **Retailer**, **Vendor**, **SKU**, **Date**, **Quantity** — each row's "
+        "Date is matched to the existing week that contains it, and the quantity is added on top of any existing "
+        "units for that Retailer/SKU/week (it will not overwrite existing data)."
+    )
+
+    missed_up = st.file_uploader("Upload missed sales file (.xlsx or .csv)", type=["xlsx", "csv"], key="dmc_missed_sales_up")
+    if missed_up is not None:
+        try:
+            parsed = read_missed_sales_file(missed_up)
+        except Exception as e:
+            st.error(f"Could not read file: {e}")
+            parsed = None
+
+        if parsed is not None and parsed.empty:
+            st.warning("No valid rows found in the file.")
+        elif parsed is not None:
+            store_cur = load_store()
+            weeks = store_cur[["StartDate", "EndDate"]].dropna().drop_duplicates().sort_values("StartDate").reset_index(drop=True)
+            matches = match_weeks_for_dates(store_cur, parsed["Date"])
+            parsed = pd.concat([parsed.reset_index(drop=True), matches.reset_index(drop=True)], axis=1)
+
+            if isinstance(vm, pd.DataFrame) and "SKU" in vm.columns and "Vendor" in vm.columns:
+                vlook = vm[["SKU", "Vendor"]].drop_duplicates(subset=["SKU"]).rename(columns={"Vendor": "VendorOnFile"})
+                parsed = parsed.merge(vlook, on="SKU", how="left")
+            else:
+                parsed["VendorOnFile"] = np.nan
+
+            unmatched_mask = parsed["StartDate"].isna()
+            if unmatched_mask.any() and not weeks.empty:
+                st.warning(f"{int(unmatched_mask.sum())} row(s) could not be auto-matched to an existing week. Pick a week manually below.")
+                week_labels = ["-- Skip this row --"] + [f"{r.StartDate.date()} / {r.EndDate.date()}" for r in weeks.itertuples()]
+                for idx in parsed[unmatched_mask].index:
+                    d = parsed.loc[idx, "Date"]
+                    d_label = d.date() if pd.notna(d) else "—"
+                    pick = st.selectbox(
+                        f"Row {idx + 1}: {parsed.loc[idx, 'Retailer']} / {parsed.loc[idx, 'SKU']} (date {d_label})",
+                        options=week_labels,
+                        index=0,
+                        key=f"dmc_missed_week_pick_{idx}",
+                    )
+                    if pick != "-- Skip this row --":
+                        sdt_str, edt_str = pick.split(" / ")
+                        parsed.loc[idx, "StartDate"] = pd.Timestamp(sdt_str)
+                        parsed.loc[idx, "EndDate"] = pd.Timestamp(edt_str)
+            elif unmatched_mask.any():
+                st.error("No existing sales weeks found in the store yet, so dates can't be auto-matched. Upload a regular weekly workbook first.")
+
+            parsed = parsed[parsed["StartDate"].notna()].copy()
+            if parsed.empty:
+                st.info("No rows available to add.")
+            else:
+                preview = parsed.copy()
+                preview["Week"] = preview["StartDate"].dt.date.astype(str) + " / " + preview["EndDate"].dt.date.astype(str)
+
+                vendor_typed = preview["Vendor"].astype(str).str.strip()
+                mismatch = (
+                    preview["VendorOnFile"].notna()
+                    & vendor_typed.ne("")
+                    & (vendor_typed.str.lower() != preview["VendorOnFile"].astype(str).str.strip().str.lower())
+                )
+                if mismatch.any():
+                    st.warning(f"{int(mismatch.sum())} row(s) have a Vendor that doesn't match the Vendor Map for that SKU. Double-check the SKU.")
+
+                st.markdown("#### Preview")
+                st.dataframe(
+                    preview[["Retailer", "Vendor", "VendorOnFile", "SKU", "Date", "Week", "Quantity"]],
+                    use_container_width=True, hide_index=True,
+                )
+
+                if st.button("Add Missed Sale(s) to Store", key="dmc_btn_add_missed_sales", use_container_width=True):
+                    new_rows = pd.DataFrame({
+                        "Retailer": parsed["Retailer"],
+                        "SKU": parsed["SKU"],
+                        "Units": pd.to_numeric(parsed["Quantity"], errors="coerce").fillna(0.0),
+                        "UnitPrice": np.nan,
+                        "StartDate": parsed["StartDate"],
+                        "EndDate": parsed["EndDate"],
+                        "SourceFile": f"Manual Correction::{getattr(missed_up, 'name', 'upload')}",
+                    })
+                    store_cur = append_missed_sales_rows(store_cur, new_rows)
+                    save_store(store_cur)
+                    st.success(f"Added {len(new_rows)} missed sale row(s) to the store.")
+                    st.rerun()
 
     df_all = enrich_sales(load_store(), load_vendor_map())
     if df_all.empty:

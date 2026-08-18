@@ -1601,6 +1601,69 @@ def append_sales_to_store(new_rows: pd.DataFrame) -> None:
     combined.to_csv(DEFAULT_SALES_STORE, index=False)
 
 # -------------------------
+# Missed sale(s) correction upload
+# -------------------------
+def read_missed_sales_file(uploaded_file) -> pd.DataFrame:
+    """Read a manual correction file with columns: Retailer, Vendor, SKU, Date, Quantity."""
+    name = getattr(uploaded_file, "name", "upload")
+    if name.lower().endswith(".csv"):
+        raw = pd.read_csv(uploaded_file)
+    else:
+        raw = pd.read_excel(uploaded_file, engine="openpyxl")
+
+    colmap = {str(c).strip().lower(): c for c in raw.columns}
+
+    def col(*names):
+        for n in names:
+            if n in colmap:
+                return colmap[n]
+        return None
+
+    c_ret = col("retailer")
+    c_ven = col("vendor")
+    c_sku = col("sku", "sku#", "skunumber", "sku number")
+    c_date = col("date", "sale date", "week date")
+    c_qty = col("quantity", "qty", "units")
+
+    missing = [n for n, c in [("Retailer", c_ret), ("SKU", c_sku), ("Date", c_date), ("Quantity", c_qty)] if c is None]
+    if missing:
+        raise ValueError(f"Missing required column(s): {', '.join(missing)}")
+
+    out = pd.DataFrame({
+        "Retailer": raw[c_ret].map(_normalize_retailer),
+        "Vendor": raw[c_ven].astype(str).str.strip() if c_ven else "",
+        "SKU": raw[c_sku].map(_normalize_sku),
+        "Date": pd.to_datetime(raw[c_date], errors="coerce"),
+        "Quantity": pd.to_numeric(raw[c_qty], errors="coerce"),
+    })
+    out = out[out["SKU"].astype(str).str.strip().ne("") & out["Date"].notna()]
+    return out.reset_index(drop=True)
+
+
+def match_weeks_for_dates(dates: pd.Series) -> pd.DataFrame:
+    """Match each date to the existing sales-store week (StartDate/EndDate) that contains it.
+    Returns a DataFrame with StartDate/EndDate columns aligned to `dates` (NaT where no week matches).
+    """
+    store = load_sales_store()
+    weeks = store[["StartDate", "EndDate"]].dropna().drop_duplicates().sort_values("StartDate").reset_index(drop=True)
+
+    starts, ends = [], []
+    for d in dates:
+        if pd.isna(d):
+            starts.append(pd.NaT)
+            ends.append(pd.NaT)
+            continue
+        hit = weeks[(weeks["StartDate"] <= d) & (weeks["EndDate"] >= d)]
+        if not hit.empty:
+            starts.append(hit.iloc[0]["StartDate"])
+            ends.append(hit.iloc[0]["EndDate"])
+        else:
+            starts.append(pd.NaT)
+            ends.append(pd.NaT)
+    return pd.DataFrame({"StartDate": starts, "EndDate": ends})
+
+
+# -------------------------
 # Weekly workbook ingestion
 # -------------------------
 def parse_date_range_from_filename(name: str, year_hint: int):
@@ -4239,6 +4302,112 @@ def run_app():
 
         with c2:
             st.caption("Append = adds rows. Overwrite = deletes existing rows for that year + retailer(s) found in the upload, then re-adds.")
+
+
+    def render_add_missed_sale():
+        st.subheader("Add Missed Sale(s)")
+
+        st.markdown(
+            """
+            Use this when a sale from a specific retailer/week wasn't captured in the original weekly upload.
+
+            Upload a spreadsheet with columns: **Retailer**, **Vendor**, **SKU**, **Date**, **Quantity**.
+            Each row's **Date** is matched to the existing sales week that contains it, and the quantity is
+            **added on top of** any existing units for that Retailer/SKU/week — it does not overwrite existing data.
+            """
+        )
+
+        up = st.file_uploader("Upload missed sales file (.xlsx or .csv)", type=["xlsx", "csv"], key="missed_sales_up")
+        if up is None:
+            return
+
+        try:
+            parsed = read_missed_sales_file(up)
+        except Exception as e:
+            st.error(f"Could not read file: {e}")
+            return
+
+        if parsed.empty:
+            st.warning("No valid rows found in the file.")
+            return
+
+        weeks = load_sales_store()[["StartDate", "EndDate"]].dropna().drop_duplicates().sort_values("StartDate").reset_index(drop=True)
+        matches = match_weeks_for_dates(parsed["Date"])
+        parsed = pd.concat([parsed.reset_index(drop=True), matches.reset_index(drop=True)], axis=1)
+
+        if isinstance(vmap, pd.DataFrame) and "SKU" in vmap.columns and "Vendor" in vmap.columns:
+            vlook = vmap[["SKU", "Vendor"]].drop_duplicates(subset=["SKU"]).rename(columns={"Vendor": "VendorOnFile"})
+            parsed = parsed.merge(vlook, on="SKU", how="left")
+        else:
+            parsed["VendorOnFile"] = np.nan
+
+        unmatched_mask = parsed["StartDate"].isna()
+        if unmatched_mask.any() and not weeks.empty:
+            st.warning(f"{int(unmatched_mask.sum())} row(s) could not be auto-matched to an existing week. Pick a week manually below.")
+            week_labels = ["-- Skip this row --"] + [f"{r.StartDate.date()} / {r.EndDate.date()}" for r in weeks.itertuples()]
+            for idx in parsed[unmatched_mask].index:
+                d = parsed.loc[idx, "Date"]
+                d_label = d.date() if pd.notna(d) else "—"
+                pick = st.selectbox(
+                    f"Row {idx + 1}: {parsed.loc[idx, 'Retailer']} / {parsed.loc[idx, 'SKU']} (date {d_label})",
+                    options=week_labels,
+                    index=0,
+                    key=f"missed_week_pick_{idx}",
+                )
+                if pick != "-- Skip this row --":
+                    sdt_str, edt_str = pick.split(" / ")
+                    parsed.loc[idx, "StartDate"] = pd.Timestamp(sdt_str)
+                    parsed.loc[idx, "EndDate"] = pd.Timestamp(edt_str)
+        elif unmatched_mask.any():
+            st.error("No existing sales weeks found in the store yet, so dates can't be auto-matched. Upload a regular weekly workbook first.")
+
+        parsed = parsed[parsed["StartDate"].notna()].copy()
+        if parsed.empty:
+            st.info("No rows available to add.")
+            return
+
+        st.markdown("### Preview")
+        preview = parsed.copy()
+        preview["Week"] = preview["StartDate"].dt.date.astype(str) + " / " + preview["EndDate"].dt.date.astype(str)
+
+        vendor_typed = preview["Vendor"].astype(str).str.strip()
+        mismatch = (
+            preview["VendorOnFile"].notna()
+            & vendor_typed.ne("")
+            & (vendor_typed.str.lower() != preview["VendorOnFile"].astype(str).str.strip().str.lower())
+        )
+        if mismatch.any():
+            st.warning(f"{int(mismatch.sum())} row(s) have a Vendor that doesn't match the Vendor Map for that SKU. Double-check the SKU.")
+
+        st.dataframe(
+            preview[["Retailer", "Vendor", "VendorOnFile", "SKU", "Date", "Week", "Quantity"]],
+            use_container_width=True, hide_index=True,
+        )
+
+        locked_years = load_year_locks()
+        parsed["_year"] = parsed["StartDate"].dt.year
+        locked_rows = parsed["_year"].isin(locked_years)
+        if locked_rows.any():
+            st.error(f"{int(locked_rows.sum())} row(s) fall in a locked year and will be excluded. Unlock the year in Bulk Data Upload if needed.")
+            parsed = parsed[~locked_rows].copy()
+
+        if parsed.empty:
+            st.info("No rows available to add.")
+            return
+
+        if st.button("Add Missed Sale(s) to Store", key="btn_add_missed_sales"):
+            new_rows = pd.DataFrame({
+                "Retailer": parsed["Retailer"],
+                "SKU": parsed["SKU"],
+                "Units": pd.to_numeric(parsed["Quantity"], errors="coerce").fillna(0.0),
+                "UnitPrice": np.nan,
+                "StartDate": parsed["StartDate"],
+                "EndDate": parsed["EndDate"],
+                "SourceFile": f"Manual Correction::{getattr(up, 'name', 'upload')}",
+            })
+            append_sales_to_store(new_rows)
+            st.success(f"Added {len(new_rows)} missed sale row(s) to the store.")
+            st.rerun()
 
 
     def render_seasonality():
@@ -7182,7 +7351,7 @@ def run_app():
 
             tool = st.selectbox(
                 "Tools",
-                options=["Bulk Data Upload", "Edit Vendor Map", "Backup / Restore"],
+                options=["Bulk Data Upload", "Add Missed Sale(s)", "Edit Vendor Map", "Backup / Restore"],
                 index=0,
                 key="dm_tool",
             )
@@ -7192,6 +7361,9 @@ def run_app():
                     render_bulk_data_upload()
                 else:
                     st.info("Bulk Data Upload is not available in this build.")
+
+            elif tool == "Add Missed Sale(s)":
+                render_add_missed_sale()
 
             elif tool == "Edit Vendor Map":
                 if "render_edit_vendor_map" in globals():

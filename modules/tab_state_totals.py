@@ -144,23 +144,23 @@ def render(ctx: dict):
     )
     sku_summary = _with_share(sku_summary)
 
-    def _state_bar_chart(data: pd.DataFrame):
+    def _state_bar_chart(data: pd.DataFrame, label_font_size: int = 11):
         order = data["State"].tolist()
         base = alt.Chart(data).encode(
             x=alt.X("State:N", sort=order, title="State"),
             y=alt.Y("Units:Q", title="Units"),
         )
         bars = base.mark_bar(color="#1f77b4")
-        units_labels = base.mark_text(dy=-22, fontWeight="bold", fontSize=11).encode(
+        units_labels = base.mark_text(dy=-26, fontWeight="bold", fontSize=label_font_size).encode(
             text=alt.Text("Units:Q", format=",.0f")
         )
-        pct_labels = base.mark_text(dy=-9, fontSize=10).encode(
+        pct_labels = base.mark_text(dy=-11, fontSize=label_font_size - 1).encode(
             text=alt.Text("% of Total:Q", format=".1%")
         )
         st.altair_chart(bars + units_labels + pct_labels, use_container_width=True)
 
     st.markdown("### Units by State (Top 10)")
-    _state_bar_chart(state_summary.head(10))
+    _state_bar_chart(state_summary.head(10), label_font_size=16)
 
     if len(state_summary) > 10:
         st.markdown("### Units by State (Remaining)")

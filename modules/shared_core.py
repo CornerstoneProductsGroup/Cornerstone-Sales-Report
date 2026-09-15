@@ -248,6 +248,33 @@ def replace_store_rows_for_uploaded_weeks(existing: pd.DataFrame, new_rows: pd.D
         return existing.copy()
 
     current = existing.copy()
+    incoming = new_rows.copy()
+
+    for frame in (current, incoming):
+        for c in ["StartDate", "EndDate"]:
+            if c in frame.columns:
+                frame[c] = pd.to_datetime(frame[c], errors="coerce")
+        if "Retailer" in frame.columns:
+            frame["Retailer"] = frame["Retailer"].map(norm_retailer)
+        if "SKU" in frame.columns:
+            frame["SKU"] = frame["SKU"].map(norm_sku)
+
+    target_keys = incoming[["Retailer", "StartDate", "EndDate"]].drop_duplicates()
+    trimmed = current.merge(
+        target_keys.assign(_replace=True),
+        on=["Retailer", "StartDate", "EndDate"],
+        how="left",
+    )
+    trimmed = trimmed[trimmed["_replace"].isna()].drop(columns=["_replace"])
+
+    combined = pd.concat([trimmed, incoming], ignore_index=True)
+    combined = combined.drop_duplicates(
+        # SourceFile can change between re-uploads of the same week; use business keys
+        # so the latest upload replaces prior rows instead of doubling totals.
+        subset=["Retailer", "SKU", "StartDate", "EndDate"],
+        keep="last",
+    )
+    return combined
 
 def update_existing_store_units(existing: pd.DataFrame, new_rows: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     if existing is None or existing.empty or new_rows is None or new_rows.empty:
@@ -314,33 +341,48 @@ def update_existing_store_units(existing: pd.DataFrame, new_rows: pd.DataFrame) 
         "unchanged": int(unchanged),
         "ignored": int(len(incoming) - len(matched_keys)),
     }
-    incoming = new_rows.copy()
 
-    for frame in (current, incoming):
-        for c in ["StartDate", "EndDate"]:
-            if c in frame.columns:
-                frame[c] = pd.to_datetime(frame[c], errors="coerce")
-        if "Retailer" in frame.columns:
-            frame["Retailer"] = frame["Retailer"].map(norm_retailer)
-        if "SKU" in frame.columns:
-            frame["SKU"] = frame["SKU"].map(norm_sku)
+def ingest_weekly_workbooks(uploaded_files, year: int, include_state_totals: bool = True) -> dict:
+    uploaded_files = list(uploaded_files or [])
+    all_sales_rows = []
+    all_state_rows = []
+    state_tabs_found = 0
 
-    target_keys = incoming[["Retailer", "StartDate", "EndDate"]].drop_duplicates()
-    trimmed = current.merge(
-        target_keys.assign(_replace=True),
-        on=["Retailer", "StartDate", "EndDate"],
-        how="left",
-    )
-    trimmed = trimmed[trimmed["_replace"].isna()].drop(columns=["_replace"])
+    for up in uploaded_files:
+        if hasattr(up, "seek"):
+            up.seek(0)
+        sales_rows = read_weekly_workbook(up, int(year))
+        if sales_rows is not None and not sales_rows.empty:
+            all_sales_rows.append(sales_rows)
 
-    combined = pd.concat([trimmed, incoming], ignore_index=True)
-    combined = combined.drop_duplicates(
-        # SourceFile can change between re-uploads of the same week; use business keys
-        # so the latest upload replaces prior rows instead of doubling totals.
-        subset=["Retailer", "SKU", "StartDate", "EndDate"],
-        keep="last",
-    )
-    return combined
+        if include_state_totals:
+            try:
+                if hasattr(up, "seek"):
+                    up.seek(0)
+                state_rows = read_state_totals_workbook(up, int(year))
+                if state_rows is not None and not state_rows.empty:
+                    all_state_rows.append(state_rows)
+                    state_tabs_found += 1
+            except ValueError as e:
+                if "No 'State Totals' worksheet found" not in str(e):
+                    raise
+
+    sales_merged = pd.concat(all_sales_rows, ignore_index=True) if all_sales_rows else pd.DataFrame()
+    state_merged = pd.concat(all_state_rows, ignore_index=True) if all_state_rows else pd.DataFrame(columns=STATE_TOTAL_COLUMNS)
+
+    store_cur = replace_store_rows_for_uploaded_weeks(load_store(), sales_merged)
+    save_store(store_cur)
+
+    if include_state_totals and not state_merged.empty:
+        state_cur = replace_state_totals_for_uploaded_weeks(load_state_totals(), state_merged)
+        save_state_totals(state_cur)
+
+    return {
+        "files": len(uploaded_files),
+        "sales_rows": int(len(sales_merged)),
+        "state_rows": int(len(state_merged)),
+        "state_tabs_found": int(state_tabs_found),
+    }
 
 def read_missed_sales_file(uploaded_file) -> pd.DataFrame:
     """Read a manual correction file with columns: Retailer, Vendor, SKU, Date, Quantity."""
@@ -1258,16 +1300,11 @@ def render_data_management_center(vm: pd.DataFrame, store: pd.DataFrame):
         uploads = st.file_uploader("Upload weekly workbook(s)", type=["xlsx"], accept_multiple_files=True, key="dmc_uploads")
         if uploads and st.button("Ingest Uploaded Workbook(s)", key="dmc_ingest_btn", use_container_width=True):
             try:
-                store_cur = load_store()
-                all_raw = []
-                for up in uploads:
-                    raw = read_weekly_workbook(up, int(year_ingest))
-                    all_raw.append(raw)
-                raw_merged = pd.concat(all_raw, ignore_index=True) if all_raw else pd.DataFrame()
-                added_rows = len(raw_merged)
-                store_cur = replace_store_rows_for_uploaded_weeks(store_cur, raw_merged)
-                save_store(store_cur)
-                st.success(f"Ingested {added_rows:,} rows from {len(uploads)} workbook(s).")
+                summary = ingest_weekly_workbooks(uploads, int(year_ingest), include_state_totals=True)
+                st.success(
+                    f"Ingested {summary['sales_rows']:,} sales row(s) and "
+                    f"{summary['state_rows']:,} state total row(s) from {summary['files']} workbook(s)."
+                )
             except Exception as e:
                 st.error(f"Ingest failed: {e}")
 

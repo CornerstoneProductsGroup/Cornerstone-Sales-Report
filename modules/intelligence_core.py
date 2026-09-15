@@ -9,15 +9,15 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from .app_core import generate_context_aware_pdf, read_weekly_workbook
+from .app_core import generate_context_aware_pdf
 from .shared_core import (
     APP_TITLE,
     load_vendor_map,
     load_store,
     load_state_totals,
-    save_store,
     enrich_sales,
     enrich_state_totals,
+    ingest_weekly_workbooks,
     available_month_labels,
     available_quarter_labels,
     available_year_labels,
@@ -488,23 +488,18 @@ def run_app():
 
         if st.button("Ingest upload(s)", disabled=(not uploads)):
             if uploads:
-                all_raw = []
                 uploaded_names = []
 
                 for up in uploads:
-                    raw = read_weekly_workbook(up, int(year))
-                    all_raw.append(raw)
                     uploaded_names.append(getattr(up, "name", "upload.xlsx"))
 
-                raw_merged = pd.concat(all_raw, ignore_index=True) if all_raw else pd.DataFrame()
-                if raw_merged.empty:
+                summary = ingest_weekly_workbooks(uploads, int(year), include_state_totals=True)
+                if summary["sales_rows"] == 0 and summary["state_rows"] == 0:
                     st.info("No rows were ingested from the selected upload(s).")
                 else:
-                    _ = enrich_sales(raw_merged, vm)
-                    merged = pd.concat([store, raw_merged], ignore_index=True)
-                    save_store(merged)
                     st.success(
-                        f"Ingested {len(raw_merged):,} rows from {len(uploaded_names)} file(s): "
+                        f"Ingested {summary['sales_rows']:,} sales row(s) and "
+                        f"{summary['state_rows']:,} state total row(s) from {len(uploaded_names)} file(s): "
                         + ", ".join(uploaded_names)
                     )
                     store = load_store()

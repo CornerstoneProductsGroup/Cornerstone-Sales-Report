@@ -144,20 +144,27 @@ def render(ctx: dict):
     )
     sku_summary = _with_share(sku_summary)
 
-    st.markdown("### Units by State")
-    state_order = state_summary["State"].tolist()
-    base = alt.Chart(state_summary).encode(
-        x=alt.X("State:N", sort=state_order, title="State"),
-        y=alt.Y("Units:Q", title="Units"),
-    )
-    bars = base.mark_bar(color="#1f77b4")
-    units_labels = base.mark_text(dy=-22, fontWeight="bold", fontSize=11).encode(
-        text=alt.Text("Units:Q", format=",.0f")
-    )
-    pct_labels = base.mark_text(dy=-9, fontSize=10).encode(
-        text=alt.Text("% of Total:Q", format=".1%")
-    )
-    st.altair_chart(bars + units_labels + pct_labels, use_container_width=True)
+    def _state_bar_chart(data: pd.DataFrame):
+        order = data["State"].tolist()
+        base = alt.Chart(data).encode(
+            x=alt.X("State:N", sort=order, title="State"),
+            y=alt.Y("Units:Q", title="Units"),
+        )
+        bars = base.mark_bar(color="#1f77b4")
+        units_labels = base.mark_text(dy=-22, fontWeight="bold", fontSize=11).encode(
+            text=alt.Text("Units:Q", format=",.0f")
+        )
+        pct_labels = base.mark_text(dy=-9, fontSize=10).encode(
+            text=alt.Text("% of Total:Q", format=".1%")
+        )
+        st.altair_chart(bars + units_labels + pct_labels, use_container_width=True)
+
+    st.markdown("### Units by State (Top 10)")
+    _state_bar_chart(state_summary.head(10))
+
+    if len(state_summary) > 10:
+        st.markdown("### Units by State (Remaining)")
+        _state_bar_chart(state_summary.iloc[10:])
     render_df(_format_table(state_summary), height=320)
 
     st.markdown("### SKU / Vendor / Retailer by State")

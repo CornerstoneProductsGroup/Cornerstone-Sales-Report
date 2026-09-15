@@ -900,6 +900,7 @@ DATA_DIR.mkdir(exist_ok=True)
 DEFAULT_VENDOR_MAP = DATA_DIR / "vendor_map.xlsx"
 DEFAULT_SALES_STORE = DATA_DIR / "sales_store.csv"
 DEFAULT_PRICE_HISTORY = DATA_DIR / "price_history.csv"
+DEFAULT_STATE_TOTALS = DATA_DIR / "state_totals_store.csv"
 
 
 # Year locks (prevent accidental edits to closed years)
@@ -4121,7 +4122,7 @@ def run_app():
             st.subheader("Backup / Restore")
 
             st.markdown("### Backup files")
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4 = st.columns(4)
 
             with c1:
                 st.markdown("#### Sales database")
@@ -4161,6 +4162,19 @@ def run_app():
                 if st.button("Restore price_history.csv", disabled=up3 is None, key="btn_restore_ph"):
                     DEFAULT_PRICE_HISTORY.write_bytes(up3.getbuffer())
                     st.success("Restored price_history.csv. Reloading…")
+                    st.rerun()
+
+            with c4:
+                st.markdown("#### State totals")
+                if DEFAULT_STATE_TOTALS.exists():
+                    st.download_button("Download state_totals_store.csv", data=DEFAULT_STATE_TOTALS.read_bytes(), file_name="state_totals_store.csv", mime="text/csv")
+                else:
+                    st.info("No state_totals_store.csv yet.")
+
+                up5 = st.file_uploader("Restore state_totals_store.csv", type=["csv"], key="restore_state_totals_csv")
+                if st.button("Restore state_totals_store.csv", disabled=up5 is None, key="btn_restore_state_totals"):
+                    DEFAULT_STATE_TOTALS.write_bytes(up5.getbuffer())
+                    st.success("Restored state_totals_store.csv. Reloading…")
                     st.rerun()
 
             st.markdown("#### Year locks")

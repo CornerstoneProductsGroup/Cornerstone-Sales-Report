@@ -42,24 +42,63 @@ def render(ctx: dict):
     df["WeekEnd"] = pd.to_datetime(df.get("WeekEnd"), errors="coerce")
     df = df[df["Units"].ne(0)].copy()
 
+    week_range_options = {
+        "Last Week": 1,
+        "Last 4 Weeks": 4,
+        "Last 8 Weeks": 8,
+        "Last 12 Weeks": 12,
+        "Last 24 Weeks": 24,
+        "Last 36 Weeks": 36,
+        "Last 52 Weeks": 52,
+    }
+    quarter_options = ["Q1", "Q2", "Q3", "Q4"]
+    month_periods = sorted(df["WeekEnd"].dropna().dt.to_period("M").unique())
+    month_options = [p.strftime("%B %Y") for p in month_periods]
+    year_options = sorted(df["WeekEnd"].dropna().dt.year.dropna().astype(int).unique().tolist())
+
     with st.expander("Filters", expanded=True):
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
-            week_options = sorted(df["WeekEnd"].dropna().dt.date.astype(str).unique().tolist())
-            selected_weeks = st.multiselect("Week End", options=week_options, default=week_options[-1:] if week_options else [])
+            search_by = st.selectbox("Search By", options=["Week", "Month", "Quarter", "Year"], index=0)
         with c2:
+            if search_by == "Week":
+                selected_timeframe = st.selectbox("Timeframe", options=list(week_range_options.keys()), index=0)
+            elif search_by == "Quarter":
+                selected_timeframe = st.multiselect("Timeframe", options=quarter_options, default=[])
+            elif search_by == "Month":
+                selected_timeframe = st.multiselect("Timeframe", options=month_options, default=[])
+            else:
+                selected_timeframe = st.multiselect("Timeframe", options=year_options, default=[])
+        with c3:
             state_options = sorted(df["State"].dropna().astype(str).unique().tolist())
             selected_states = st.multiselect("State", options=state_options, default=[])
-        with c3:
+        with c4:
             retailer_options = sorted(df["Retailer"].dropna().astype(str).unique().tolist())
             selected_retailers = st.multiselect("Retailer", options=retailer_options, default=[])
-        with c4:
+        with c5:
             vendor_options = sorted(df["Vendor"].dropna().astype(str).unique().tolist())
             selected_vendors = st.multiselect("Vendor", options=vendor_options, default=[])
 
     filtered = df.copy()
-    if selected_weeks:
-        filtered = filtered[filtered["WeekEnd"].dt.date.astype(str).isin(selected_weeks)]
+    if search_by == "Week":
+        unique_weeks = sorted(df["WeekEnd"].dropna().unique())
+        n = week_range_options[selected_timeframe]
+        weeks_to_keep = unique_weeks[-n:] if unique_weeks else []
+        filtered = filtered[filtered["WeekEnd"].isin(weeks_to_keep)]
+    elif search_by == "Quarter":
+        if selected_timeframe:
+            quarter_labels = filtered["WeekEnd"].dt.quarter.map(lambda q: f"Q{int(q)}" if pd.notna(q) else None)
+            filtered = filtered[quarter_labels.isin(selected_timeframe)]
+    elif search_by == "Month":
+        if selected_timeframe:
+            month_labels = filtered["WeekEnd"].dt.to_period("M").apply(
+                lambda p: p.strftime("%B %Y") if pd.notna(p) else None
+            )
+            filtered = filtered[month_labels.isin(selected_timeframe)]
+    else:
+        if selected_timeframe:
+            filtered = filtered[filtered["WeekEnd"].dt.year.isin(selected_timeframe)]
+
     if selected_states:
         filtered = filtered[filtered["State"].isin(selected_states)]
     if selected_retailers:

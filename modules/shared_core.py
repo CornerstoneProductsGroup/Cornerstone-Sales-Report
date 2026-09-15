@@ -248,6 +248,72 @@ def replace_store_rows_for_uploaded_weeks(existing: pd.DataFrame, new_rows: pd.D
         return existing.copy()
 
     current = existing.copy()
+
+def update_existing_store_units(existing: pd.DataFrame, new_rows: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    if existing is None or existing.empty or new_rows is None or new_rows.empty:
+        return existing.copy() if existing is not None else pd.DataFrame(columns=BASE_COLUMNS), {
+            "matched": 0,
+            "updated": 0,
+            "unchanged": 0,
+            "ignored": 0,
+        }
+
+    current = existing.copy()
+    incoming = new_rows.copy()
+    keys = ["Retailer", "SKU", "StartDate", "EndDate"]
+
+    for frame in (current, incoming):
+        for c in ["Retailer", "SKU", "Units", "StartDate", "EndDate"]:
+            if c not in frame.columns:
+                frame[c] = np.nan
+        frame["Retailer"] = frame["Retailer"].map(norm_retailer)
+        frame["SKU"] = frame["SKU"].map(norm_sku)
+        frame["Units"] = pd.to_numeric(frame["Units"], errors="coerce").fillna(0.0)
+        for c in ["StartDate", "EndDate"]:
+            frame[c] = pd.to_datetime(frame[c], errors="coerce")
+
+    incoming = (
+        incoming.dropna(subset=["StartDate", "EndDate"])
+        .groupby(keys, as_index=False)
+        .agg(Units=("Units", "sum"))
+    )
+
+    current_key_index = pd.MultiIndex.from_frame(current[keys]) if not current.empty else pd.MultiIndex.from_tuples([])
+    incoming_key_index = pd.MultiIndex.from_frame(incoming[keys]) if not incoming.empty else pd.MultiIndex.from_tuples([])
+    matched_keys = incoming_key_index.intersection(current_key_index)
+
+    if len(matched_keys) == 0:
+        return current, {
+            "matched": 0,
+            "updated": 0,
+            "unchanged": 0,
+            "ignored": int(len(incoming)),
+        }
+
+    incoming_lookup = incoming.set_index(keys)["Units"]
+    updated = 0
+    unchanged = 0
+
+    for key in matched_keys:
+        new_units = float(incoming_lookup.loc[key])
+        mask = pd.Series(True, index=current.index)
+        for col, value in zip(keys, key):
+            mask &= current[col].eq(value)
+        old_units = pd.to_numeric(current.loc[mask, "Units"], errors="coerce").fillna(0.0)
+        changed_mask = mask.copy()
+        changed_mask.loc[mask] = old_units.ne(new_units).to_numpy()
+        changed_count = int(changed_mask.sum())
+        if changed_count:
+            current.loc[changed_mask, "Units"] = new_units
+            updated += changed_count
+        unchanged += int(mask.sum()) - changed_count
+
+    return current, {
+        "matched": int(len(matched_keys)),
+        "updated": int(updated),
+        "unchanged": int(unchanged),
+        "ignored": int(len(incoming) - len(matched_keys)),
+    }
     incoming = new_rows.copy()
 
     for frame in (current, incoming):
@@ -1204,6 +1270,29 @@ def render_data_management_center(vm: pd.DataFrame, store: pd.DataFrame):
                 st.success(f"Ingested {added_rows:,} rows from {len(uploads)} workbook(s).")
             except Exception as e:
                 st.error(f"Ingest failed: {e}")
+
+    st.markdown("### Update Existing Weekly Units")
+    st.caption("Use this for the new sales sheet type when the week is already loaded. Matching Retailer/SKU/week rows have Units corrected only when different; new rows are ignored and nothing is added together.")
+    correction_year = st.number_input("Year hint for unit correction workbook(s)", min_value=2010, max_value=2100, value=date.today().year, step=1, key="dmc_unit_correction_year")
+    correction_uploads = st.file_uploader("Upload unit correction workbook(s)", type=["xlsx"], accept_multiple_files=True, key="dmc_unit_correction_uploads")
+    if correction_uploads and st.button("Update Existing Units Only", key="dmc_update_existing_units_btn", use_container_width=True):
+        try:
+            store_cur = load_store()
+            all_raw = []
+            for up in correction_uploads:
+                raw = read_weekly_workbook(up, int(correction_year))
+                if raw is not None and not raw.empty:
+                    all_raw.append(raw)
+            raw_merged = pd.concat(all_raw, ignore_index=True) if all_raw else pd.DataFrame()
+            updated_store, summary = update_existing_store_units(store_cur, raw_merged)
+            save_store(updated_store)
+            st.success(
+                f"Updated {summary['updated']:,} row(s). "
+                f"Kept {summary['unchanged']:,} matched row(s) the same. "
+                f"Ignored {summary['ignored']:,} uploaded row(s) that were not already in the sales store."
+            )
+        except Exception as e:
+            st.error(f"Unit correction failed: {e}")
 
     st.markdown("### State Totals Upload")
     st.caption("Use this for the new workbook's State Totals tab only. This writes to a separate state totals store and does not change sales data.")

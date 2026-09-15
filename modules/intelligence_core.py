@@ -14,8 +14,10 @@ from .shared_core import (
     APP_TITLE,
     load_vendor_map,
     load_store,
+    load_state_totals,
     save_store,
     enrich_sales,
+    enrich_state_totals,
     available_month_labels,
     available_quarter_labels,
     available_year_labels,
@@ -40,6 +42,7 @@ from . import (
     tab_month_year_compare,
     tab_multi_compare,
     tab_lookup_center,
+    tab_state_totals,
 )
 
 
@@ -76,6 +79,11 @@ def render_current_analysis_view(ctx: dict):
             tab_kpi_dashboard.render(ctx)
             return
         st.warning("Sales Dashboard tab render function was not found.")
+    elif analysis_view == "State Totals":
+        if hasattr(tab_state_totals, "render"):
+            tab_state_totals.render(ctx)
+            return
+        st.warning("State Totals tab render function was not found.")
     elif analysis_view == "Standard Intelligence":
         if hasattr(tab_standard_intelligence, "render"):
             tab_standard_intelligence.render(ctx)
@@ -347,6 +355,7 @@ def run_app():
                 "Month / Year Compare",
                 "Multi Month / Year Compare",
                 "Lookup Center",
+                "State Totals",
                 "Data Management Center",
             ],
             index=0,
@@ -446,6 +455,10 @@ def run_app():
             timeframe = "Last 8 weeks"
             compare_mode = "None"
 
+        elif analysis_view == "State Totals":
+            timeframe = "State Totals"
+            compare_mode = "None"
+
         else:
             timeframe = "Multi Selection"
             compare_mode = "None"
@@ -506,6 +519,23 @@ def run_app():
 
     if analysis_view == "Data Management Center":
         render_data_management_center(vm, store)
+        return
+
+    if analysis_view == "State Totals":
+        df_state = enrich_state_totals(load_state_totals(), vm)
+        if scope == "Retailer" and scope_pick:
+            df_state = df_state[df_state["Retailer"].isin(scope_pick)]
+        elif scope == "Vendor" and scope_pick:
+            df_state = df_state[df_state["Vendor"].isin(scope_pick)]
+        elif scope == "SKU" and scope_pick:
+            df_state = df_state[df_state["SKU"].isin(scope_pick)]
+        render_current_analysis_view({
+            "analysis_view": analysis_view,
+            "df_state": df_state,
+            "content_view": content_view,
+            "scope": scope,
+            "scope_pick": scope_pick,
+        })
         return
 
     if analysis_view == "Month / Year Compare":

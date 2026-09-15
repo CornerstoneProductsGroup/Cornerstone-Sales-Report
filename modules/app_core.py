@@ -1680,15 +1680,34 @@ def parse_date_range_from_filename(name: str, year_hint: int):
         y = int(year_hint)
         return pd.Timestamp(date(y, mo1, d1)), pd.Timestamp(date(y, mo2, d2))
 
+    m = re.search(r"(\d{4})[-_/.](\d{1,2})[-_/.](\d{1,2})", n)
+    if m:
+        y, mo, d = map(int, m.groups())
+        edt = pd.Timestamp(date(y, mo, d))
+        return edt - pd.Timedelta(days=6), edt
+
+    m = re.search(r"(?<!\d)(\d{1,2})[-_/.](\d{1,2})[-_/.](\d{2,4})(?!\d)", n)
+    if m:
+        mo, d, y = map(int, m.groups())
+        if y < 100:
+            y += 2000
+        edt = pd.Timestamp(date(y, mo, d))
+        return edt - pd.Timedelta(days=6), edt
+
+    m = re.search(r"(?<!\d)(\d{1,2})[-_/.](\d{1,2})(?!\d)", n)
+    if m:
+        mo, d = map(int, m.groups())
+        edt = pd.Timestamp(date(int(year_hint), mo, d))
+        return edt - pd.Timedelta(days=6), edt
+
     return None, None
 
 
 def read_weekly_workbook(uploaded_file, year: int) -> pd.DataFrame:
-    """Read a weekly sales workbook where each sheet is a retailer.
-    Expected layout per sheet:
-      - Column A: SKU (no header required)
-      - Column B: Units
-      - Optional Column C: UnitPrice
+    """Read a weekly sales workbook.
+    Supported layouts:
+      - One retailer per sheet: Column A SKU, Column B Units, optional Column C UnitPrice
+      - Weekly list: Column A SKU, Column B Total Units, Column C Retailer
     NOTE: Some retailers (e.g. Zoro/HomeSelects) may have only a single data row.
     Pandas can sometimes interpret that as header-only depending on the engine,
     so we include an openpyxl fallback to reliably read the first rows.
@@ -1718,6 +1737,9 @@ def read_weekly_workbook(uploaded_file, year: int) -> pd.DataFrame:
 
     dfs = []
     for sh in xls.sheet_names:
+        if str(sh).strip().lower() == "state totals":
+            continue
+
         retailer = _normalize_retailer(sh)
 
         # Primary read (no headers)
@@ -1756,16 +1778,28 @@ def read_weekly_workbook(uploaded_file, year: int) -> pd.DataFrame:
         raw.columns = ["SKU", "Units", "UnitPrice"] if raw.shape[1] == 3 else ["SKU", "Units"]
 
         raw["SKU"] = raw["SKU"].map(_normalize_sku)
-        raw["Units"] = pd.to_numeric(raw["Units"], errors="coerce").fillna(0.0)
+        units_numeric = pd.to_numeric(raw["Units"], errors="coerce")
+
+        retailer_col = None
+        if "UnitPrice" in raw.columns:
+            third_nonblank = raw["UnitPrice"].dropna().astype(str).str.strip()
+            third_nonblank = third_nonblank[third_nonblank.ne("")]
+            third_numeric = pd.to_numeric(third_nonblank, errors="coerce")
+            if not third_nonblank.empty and third_numeric.isna().mean() > 0.5:
+                retailer_col = raw["UnitPrice"].map(_normalize_retailer)
+
+        raw["Units"] = units_numeric.fillna(0.0)
 
         if "UnitPrice" in raw.columns:
-            raw["UnitPrice"] = pd.to_numeric(raw["UnitPrice"], errors="coerce")
+            raw["UnitPrice"] = np.nan if retailer_col is not None else pd.to_numeric(raw["UnitPrice"], errors="coerce")
         else:
             raw["UnitPrice"] = np.nan
 
         raw = raw[raw["SKU"].astype(str).str.strip().ne("")]
+        raw = raw[raw["SKU"].astype(str).str.lower().ne("sku")]
 
-        raw["Retailer"] = retailer
+        raw["Retailer"] = retailer_col if retailer_col is not None else retailer
+        raw = raw[raw["Retailer"].astype(str).str.strip().ne("")]
         raw["StartDate"] = pd.to_datetime(sdt)
         raw["EndDate"] = pd.to_datetime(edt)
         raw["SourceFile"] = fname

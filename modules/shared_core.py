@@ -21,6 +21,7 @@ APP_TITLE = "Cornerstone Sales Intelligence"
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DEFAULT_VENDOR_MAP = DATA_DIR / "vendor_map.xlsx"
 DEFAULT_STORE_CSV = DATA_DIR / "sales_store.csv"
+DEFAULT_STATE_TOTALS_CSV = DATA_DIR / "state_totals_store.csv"
 
 # -----------------------------
 # Normalization helpers
@@ -62,6 +63,7 @@ def norm_sku(x: str) -> str:
 # Storage
 # -----------------------------
 BASE_COLUMNS = ["Retailer","Vendor","SKU","Units","Price","Sales","StartDate","EndDate","SourceFile"]
+STATE_TOTAL_COLUMNS = ["State","Retailer","SKU","Units","StartDate","EndDate","SourceFile"]
 
 def load_store() -> pd.DataFrame:
     if DEFAULT_STORE_CSV.exists():
@@ -87,6 +89,157 @@ def save_store(df: pd.DataFrame) -> None:
             keep[c] = np.nan
     keep = keep[["Retailer","SKU","Units","UnitPrice","StartDate","EndDate","SourceFile"]].copy()
     keep.to_csv(DEFAULT_STORE_CSV, index=False)
+
+def load_state_totals() -> pd.DataFrame:
+    if DEFAULT_STATE_TOTALS_CSV.exists():
+        df = pd.read_csv(DEFAULT_STATE_TOTALS_CSV)
+    else:
+        df = pd.DataFrame(columns=STATE_TOTAL_COLUMNS)
+    for c in STATE_TOTAL_COLUMNS:
+        if c not in df.columns:
+            df[c] = np.nan
+    df = df[STATE_TOTAL_COLUMNS].copy()
+    df["State"] = df["State"].astype(str).str.strip().str.upper()
+    df["Retailer"] = df["Retailer"].map(norm_retailer)
+    df["SKU"] = df["SKU"].map(norm_sku)
+    df["Units"] = pd.to_numeric(df["Units"], errors="coerce").fillna(0.0)
+    for c in ["StartDate", "EndDate"]:
+        df[c] = pd.to_datetime(df[c], errors="coerce")
+    return df
+
+def save_state_totals(df: pd.DataFrame) -> None:
+    keep = df.copy() if df is not None else pd.DataFrame(columns=STATE_TOTAL_COLUMNS)
+    for c in STATE_TOTAL_COLUMNS:
+        if c not in keep.columns:
+            keep[c] = np.nan
+    keep = keep[STATE_TOTAL_COLUMNS].copy()
+    keep.to_csv(DEFAULT_STATE_TOTALS_CSV, index=False)
+
+def replace_state_totals_for_uploaded_weeks(existing: pd.DataFrame, new_rows: pd.DataFrame) -> pd.DataFrame:
+    if existing is None or existing.empty:
+        return new_rows.copy() if new_rows is not None else pd.DataFrame(columns=STATE_TOTAL_COLUMNS)
+    if new_rows is None or new_rows.empty:
+        return existing.copy()
+
+    current = existing.copy()
+    incoming = new_rows.copy()
+    for frame in (current, incoming):
+        for c in ["StartDate", "EndDate"]:
+            frame[c] = pd.to_datetime(frame[c], errors="coerce")
+        frame["State"] = frame["State"].astype(str).str.strip().str.upper()
+        frame["Retailer"] = frame["Retailer"].map(norm_retailer)
+        frame["SKU"] = frame["SKU"].map(norm_sku)
+
+    target_keys = incoming[["StartDate", "EndDate"]].drop_duplicates()
+    trimmed = current.merge(target_keys.assign(_replace=True), on=["StartDate", "EndDate"], how="left")
+    trimmed = trimmed[trimmed["_replace"].isna()].drop(columns=["_replace"])
+    combined = pd.concat([trimmed, incoming], ignore_index=True)
+    return combined.drop_duplicates(subset=["State", "Retailer", "SKU", "StartDate", "EndDate"], keep="last")
+
+def read_state_totals_workbook(uploaded_file, year: int) -> pd.DataFrame:
+    fname = getattr(uploaded_file, "name", "upload.xlsx")
+    xls = pd.ExcelFile(uploaded_file, engine="openpyxl")
+    sheet_lookup = {str(s).strip().lower(): s for s in xls.sheet_names}
+    sheet_name = sheet_lookup.get("state totals")
+    if sheet_name is None:
+        raise ValueError("No 'State Totals' worksheet found.")
+
+    raw = pd.read_excel(xls, sheet_name=sheet_name, header=0, engine="openpyxl")
+    raw = raw.dropna(how="all").dropna(axis=1, how="all")
+    if raw.empty:
+        return pd.DataFrame(columns=STATE_TOTAL_COLUMNS)
+
+    colmap = {re.sub(r"[^a-z0-9]", "", str(c).strip().lower()): c for c in raw.columns}
+
+    def col(*names):
+        for name in names:
+            key = re.sub(r"[^a-z0-9]", "", name.strip().lower())
+            if key in colmap:
+                return colmap[key]
+        return None
+
+    c_sku = col("sku", "sku number", "item", "item number")
+    c_state = col("state", "st")
+    c_units = col("units", "total units", "unit total", "qty", "quantity")
+    c_retailer = col("retailer", "retail", "customer")
+
+    sdt, edt = parse_date_range_from_filename(fname, year_hint=year)
+    if sdt is None:
+        sdt = pd.Timestamp(date.today() - timedelta(days=7))
+        edt = pd.Timestamp(date.today())
+
+    if c_sku is not None and c_state is not None and c_units is not None:
+        out = pd.DataFrame({
+            "State": raw[c_state],
+            "Retailer": raw[c_retailer] if c_retailer is not None else "",
+            "SKU": raw[c_sku],
+            "Units": raw[c_units],
+        })
+    elif c_sku is not None:
+        id_cols = [c_sku]
+        if c_retailer is not None:
+            id_cols.append(c_retailer)
+        ignored = {c for c in [c_sku, c_retailer] if c is not None}
+        state_cols = []
+        for c in raw.columns:
+            if c in ignored:
+                continue
+            name = str(c).strip().lower()
+            if name in {"total", "grand total", "units", "total units"}:
+                continue
+            numeric = pd.to_numeric(raw[c], errors="coerce")
+            if numeric.notna().any():
+                state_cols.append(c)
+        if not state_cols:
+            raise ValueError("Could not identify state unit columns on the 'State Totals' worksheet.")
+        melted = raw.melt(id_vars=id_cols, value_vars=state_cols, var_name="State", value_name="Units")
+        out = pd.DataFrame({
+            "State": melted["State"],
+            "Retailer": melted[c_retailer] if c_retailer is not None else "",
+            "SKU": melted[c_sku],
+            "Units": melted["Units"],
+        })
+    else:
+        raise ValueError("State Totals must include a SKU column.")
+
+    out["State"] = out["State"].astype(str).str.strip().str.upper()
+    out["Retailer"] = out["Retailer"].map(norm_retailer)
+    out["SKU"] = out["SKU"].map(norm_sku)
+    out["Units"] = pd.to_numeric(out["Units"], errors="coerce").fillna(0.0)
+    out = out[out["SKU"].astype(str).str.strip().ne("")]
+    out = out[out["SKU"].astype(str).str.lower().ne("sku")]
+    out = out[out["State"].astype(str).str.strip().ne("")]
+    out = out[~out["State"].astype(str).str.lower().isin(["state", "nan", "none", "total", "grand total"])]
+    out = out[out["Units"].ne(0)]
+    out["StartDate"] = pd.to_datetime(sdt)
+    out["EndDate"] = pd.to_datetime(edt)
+    out["SourceFile"] = fname
+    return out[STATE_TOTAL_COLUMNS].reset_index(drop=True)
+
+def enrich_state_totals(df_raw: pd.DataFrame, vm: pd.DataFrame) -> pd.DataFrame:
+    df = df_raw.copy() if df_raw is not None else pd.DataFrame(columns=STATE_TOTAL_COLUMNS)
+    for c in STATE_TOTAL_COLUMNS:
+        if c not in df.columns:
+            df[c] = np.nan
+    df["State"] = df["State"].astype(str).str.strip().str.upper()
+    df["Retailer"] = df["Retailer"].map(norm_retailer)
+    df["SKU"] = df["SKU"].map(norm_sku)
+    df["Units"] = pd.to_numeric(df["Units"], errors="coerce").fillna(0.0)
+    for c in ["StartDate", "EndDate"]:
+        df[c] = pd.to_datetime(df[c], errors="coerce")
+    df["WeekEnd"] = df["EndDate"].fillna(df["StartDate"])
+
+    if vm is not None and not vm.empty and {"Retailer", "SKU", "Vendor"}.issubset(vm.columns):
+        exact = vm[["Retailer", "SKU", "Vendor"]].drop_duplicates(subset=["Retailer", "SKU"])
+        sku_only = vm[["SKU", "Vendor"]].dropna().drop_duplicates(subset=["SKU"]).rename(columns={"Vendor": "VendorBySKU"})
+        df = df.merge(exact, on=["Retailer", "SKU"], how="left")
+        df = df.merge(sku_only, on="SKU", how="left")
+        df["Vendor"] = df["Vendor"].fillna(df["VendorBySKU"])
+        df = df.drop(columns=["VendorBySKU"])
+    else:
+        df["Vendor"] = np.nan
+    df["Vendor"] = df["Vendor"].fillna("Unknown").astype(str).str.strip()
+    return add_quarter_columns(df, week_column="WeekEnd")
 
 def replace_store_rows_for_uploaded_weeks(existing: pd.DataFrame, new_rows: pd.DataFrame) -> pd.DataFrame:
     if existing is None or existing.empty:
@@ -1051,6 +1204,26 @@ def render_data_management_center(vm: pd.DataFrame, store: pd.DataFrame):
                 st.success(f"Ingested {added_rows:,} rows from {len(uploads)} workbook(s).")
             except Exception as e:
                 st.error(f"Ingest failed: {e}")
+
+    st.markdown("### State Totals Upload")
+    st.caption("Use this for the new workbook's State Totals tab only. This writes to a separate state totals store and does not change sales data.")
+    state_year = st.number_input("Year hint for state totals workbook(s)", min_value=2010, max_value=2100, value=date.today().year, step=1, key="dmc_state_totals_year")
+    state_uploads = st.file_uploader("Upload state totals workbook(s)", type=["xlsx"], accept_multiple_files=True, key="dmc_state_totals_uploads")
+    if state_uploads and st.button("Ingest State Totals Only", key="dmc_state_totals_ingest_btn", use_container_width=True):
+        try:
+            state_cur = load_state_totals()
+            all_state_rows = []
+            for up in state_uploads:
+                state_rows = read_state_totals_workbook(up, int(state_year))
+                if state_rows is not None and not state_rows.empty:
+                    all_state_rows.append(state_rows)
+            state_merged = pd.concat(all_state_rows, ignore_index=True) if all_state_rows else pd.DataFrame(columns=STATE_TOTAL_COLUMNS)
+            added_rows = len(state_merged)
+            state_cur = replace_state_totals_for_uploaded_weeks(state_cur, state_merged)
+            save_state_totals(state_cur)
+            st.success(f"Ingested {added_rows:,} state total row(s) from {len(state_uploads)} workbook(s). Sales data was not changed.")
+        except Exception as e:
+            st.error(f"State totals ingest failed: {e}")
 
     st.markdown("---")
     st.markdown("### Add Missed Sale(s)")

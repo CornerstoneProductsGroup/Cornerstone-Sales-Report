@@ -283,6 +283,7 @@ def update_existing_store_units(existing: pd.DataFrame, new_rows: pd.DataFrame) 
             "updated": 0,
             "unchanged": 0,
             "ignored": 0,
+            "changes": pd.DataFrame(columns=["Retailer", "SKU", "StartDate", "EndDate", "Old Units", "New Units", "Difference"]),
         }
 
     current = existing.copy()
@@ -315,11 +316,13 @@ def update_existing_store_units(existing: pd.DataFrame, new_rows: pd.DataFrame) 
             "updated": 0,
             "unchanged": 0,
             "ignored": int(len(incoming)),
+            "changes": pd.DataFrame(columns=["Retailer", "SKU", "StartDate", "EndDate", "Old Units", "New Units", "Difference"]),
         }
 
     incoming_lookup = incoming.set_index(keys)["Units"]
     updated = 0
     unchanged = 0
+    change_rows = []
 
     for key in matched_keys:
         new_units = float(incoming_lookup.loc[key])
@@ -331,6 +334,17 @@ def update_existing_store_units(existing: pd.DataFrame, new_rows: pd.DataFrame) 
         changed_mask.loc[mask] = old_units.ne(new_units).to_numpy()
         changed_count = int(changed_mask.sum())
         if changed_count:
+            changed_old_units = pd.to_numeric(current.loc[changed_mask, "Units"], errors="coerce").fillna(0.0)
+            for row_idx, old_units_value in changed_old_units.items():
+                change_rows.append({
+                    "Retailer": current.loc[row_idx, "Retailer"],
+                    "SKU": current.loc[row_idx, "SKU"],
+                    "StartDate": current.loc[row_idx, "StartDate"],
+                    "EndDate": current.loc[row_idx, "EndDate"],
+                    "Old Units": float(old_units_value),
+                    "New Units": new_units,
+                    "Difference": new_units - float(old_units_value),
+                })
             current.loc[changed_mask, "Units"] = new_units
             updated += changed_count
         unchanged += int(mask.sum()) - changed_count
@@ -340,6 +354,7 @@ def update_existing_store_units(existing: pd.DataFrame, new_rows: pd.DataFrame) 
         "updated": int(updated),
         "unchanged": int(unchanged),
         "ignored": int(len(incoming) - len(matched_keys)),
+        "changes": pd.DataFrame(change_rows, columns=["Retailer", "SKU", "StartDate", "EndDate", "Old Units", "New Units", "Difference"]),
     }
 
 def ingest_weekly_workbooks(uploaded_files, year: int, include_state_totals: bool = True) -> dict:
@@ -1328,6 +1343,29 @@ def render_data_management_center(vm: pd.DataFrame, store: pd.DataFrame):
                 f"Kept {summary['unchanged']:,} matched row(s) the same. "
                 f"Ignored {summary['ignored']:,} uploaded row(s) that were not already in the sales store."
             )
+            changes = summary.get("changes", pd.DataFrame())
+            if isinstance(changes, pd.DataFrame) and not changes.empty:
+                changes_display = changes.copy()
+                changes_display["Week"] = (
+                    pd.to_datetime(changes_display["StartDate"], errors="coerce").dt.date.astype(str)
+                    + " / "
+                    + pd.to_datetime(changes_display["EndDate"], errors="coerce").dt.date.astype(str)
+                )
+                for c in ["Old Units", "New Units", "Difference"]:
+                    changes_display[c] = pd.to_numeric(changes_display[c], errors="coerce").map(lambda x: f"{x:,.0f}")
+                changes_display = changes_display[["Week", "Retailer", "SKU", "Old Units", "New Units", "Difference"]]
+                st.markdown("#### Updated Rows")
+                st.dataframe(changes_display, use_container_width=True, hide_index=True)
+                st.download_button(
+                    "Download Updated Rows CSV",
+                    data=changes.to_csv(index=False).encode("utf-8"),
+                    file_name="updated_weekly_units.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    key="dmc_download_updated_units_csv",
+                )
+            elif summary["updated"] == 0:
+                st.info("No unit differences were found in the matching rows.")
         except Exception as e:
             st.error(f"Unit correction failed: {e}")
 

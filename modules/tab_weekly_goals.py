@@ -35,7 +35,12 @@ def _peak_chart(weeks: pd.DataFrame) -> alt.Chart:
             {"x": i + half, "y": 0.0, "week": i},
         ]
     tri = pd.DataFrame(rows)
-    peaks = pd.DataFrame({"x": range(len(labels)), "y": weeks["Sales"].tolist(), "Week": labels})
+    sales_vals = weeks["Sales"].tolist()
+    peaks = pd.DataFrame({"x": range(len(labels)), "y": sales_vals, "Week": labels})
+    # Labels sit ~2-9% of the y-range above each peak; lift ones that would straddle the target line above it.
+    y_top = max(max(sales_vals, default=0.0), WEEKLY_TARGET) * 1.1
+    collides = (peaks["y"] < WEEKLY_TARGET) & (peaks["y"] > WEEKLY_TARGET - 0.1 * y_top)
+    peaks["label_y"] = peaks["y"].where(~collides, WEEKLY_TARGET + 0.02 * y_top)
 
     x_axis = alt.Axis(
         values=list(range(len(labels))),
@@ -52,9 +57,9 @@ def _peak_chart(weeks: pd.DataFrame) -> alt.Chart:
         y=y_enc,
         detail="week:N",
     )
-    text = alt.Chart(peaks).mark_text(dy=-10, color="#666").encode(
+    text = alt.Chart(peaks).mark_text(dy=-10, color="#444", fontWeight="bold").encode(
         x=alt.X("x:Q", scale=x_scale),
-        y="y:Q",
+        y=alt.Y("label_y:Q", title=None),
         text=alt.Text("y:Q", format="$,.0f"),
         tooltip=[alt.Tooltip("Week:N"), alt.Tooltip("y:Q", title="Sales", format="$,.0f")],
     )
@@ -63,7 +68,7 @@ def _peak_chart(weeks: pd.DataFrame) -> alt.Chart:
     rule_text = alt.Chart(target).mark_text(
         align="left", dx=4, dy=-8, color="#d62728", fontWeight="bold"
     ).encode(y="y:Q", x=alt.value(0), text=alt.value(f"Target {money(WEEKLY_TARGET)}"))
-    return (area + text + rule + rule_text).properties(height=360)
+    return (area + rule + rule_text + text).properties(height=360)
 
 
 def render(ctx: dict):

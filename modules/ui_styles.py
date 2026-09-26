@@ -57,6 +57,12 @@ def apply_global_styles():
     .sales-exec-kpi-delta{font-size:14px;font-weight:800;line-height:1.1;}
     .sales-exec-kpi-meta-line{font-size:12px;line-height:1.25;color:#4b5563;margin-top:4px;}
     .sales-exec-context{font-size:12px;color:#6b7280;margin:0 0 10px 0;}
+    .sales-exec-kpi-table{width:100%;border-collapse:collapse;background:#ffffff;border:1px solid rgba(148,163,184,0.35);box-shadow:0 1px 3px rgba(15,23,42,0.08);margin:0 0 8px 0;}
+    .sales-exec-kpi-table th{font-size:13px;font-weight:700;color:#5b6472;text-align:right;padding:10px 16px;border-bottom:1px solid rgba(203,213,225,0.9);}
+    .sales-exec-kpi-table td{font-size:15px;color:#374151;text-align:right;padding:12px 16px;border-bottom:1px solid rgba(226,232,240,0.9);white-space:nowrap;}
+    .sales-exec-kpi-table th:first-child,.sales-exec-kpi-table td:first-child{text-align:left;}
+    .sales-exec-kpi-table td.cur{font-weight:800;color:#1f2937;}
+    .sales-exec-kpi-table tr:last-child td{border-bottom:none;}
 
     .sales-movers-table{display:flex;flex-direction:column;gap:0;height:540px;}
     .sales-movers-row{display:grid;grid-template-columns:minmax(0,1.1fr) auto auto minmax(0,1fr);gap:10px;align-items:center;padding:6px 6px;border-top:1px solid rgba(226,232,240,0.9);flex:1;}

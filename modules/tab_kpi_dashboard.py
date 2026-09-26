@@ -1548,6 +1548,59 @@ def _render_exec_kpi_ribbon(
     )
 
 
+def _render_exec_kpi_table(
+    kA: dict,
+    kB: dict,
+    current_label: str,
+    compare_label: str | None,
+    new_sku_tile: dict[str, object],
+    lost_sku_tile: dict[str, object] | None,
+):
+    metrics = [
+        ("Sales", "Sales", money),
+        ("Units", "Units", lambda v: f"{v:,.0f}"),
+        ("Average selling price", "ASP", money),
+    ]
+    esc = html.escape
+
+    head = f"<th>Metric</th><th>{esc(current_label)}</th>"
+    if compare_label:
+        head += f"<th>{esc(compare_label)}</th><th>Change</th>"
+
+    rows = ""
+    for name, key, fmt in metrics:
+        cur = float(kA.get(key, 0.0))
+        row = f"<td>{esc(name)}</td><td class='cur'>{esc(fmt(cur))}</td>"
+        if compare_label:
+            ref = float(kB.get(key, 0.0))
+            diff = cur - ref
+            arrow = "▲" if diff > 0 else ("▼" if diff < 0 else "")
+            pct = abs(_safe_pct_change(cur, ref))
+            change = f"{arrow} {fmt(abs(diff))} ({pct:,.1f}%)".strip()
+            row += (
+                f"<td>{esc(fmt(ref))}</td>"
+                f"<td style='color:{_delta_color(diff)};'>{esc(change)}</td>"
+            )
+        rows += f"<tr>{row}</tr>"
+
+    sku_bits = []
+    if compare_label:
+        sku_bits.append(f"New SKUs: {new_sku_tile['value']} ({new_sku_tile['delta']})")
+        if lost_sku_tile:
+            sku_bits.append(f"Lost SKUs: {lost_sku_tile['value']} ({lost_sku_tile['delta']})")
+    sku_html = (
+        f"<div class='sales-exec-context'>{esc('  |  '.join(sku_bits))}</div>" if sku_bits else ""
+    )
+
+    st.markdown(
+        "<div class='sales-exec-accent'></div>"
+        f"<table class='sales-exec-kpi-table'><thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table>"
+        f"{sku_html}"
+        "<div class='sales-exec-accent' style='margin:8px 0 0 0;'></div>",
+        unsafe_allow_html=True,
+    )
+
+
 def _render_movers_panel(movers: list[dict[str, object]]):
     if not movers:
         st.info("No movers available for the selected timeframe.")
@@ -1863,13 +1916,13 @@ def render(ctx: dict):
                 st.info("No weekly trend data available for the selected timeframe.")
             else:
                 st.altair_chart(trend_chart, use_container_width=True)
-        _render_exec_kpi_ribbon(
-            current_tiles=tiles["current"],
-            current_row_label=f"Current Totals: {current_label}",
+        _render_exec_kpi_table(
+            kA=kA,
+            kB=kB,
             current_label=current_label,
             compare_label=compare_label,
-            compare_tiles=tiles["compare"] if compare_label else None,
-            compare_row_label=(f"Compare Totals: {compare_label}" if compare_label else None),
+            new_sku_tile=tiles["current"][3],
+            lost_sku_tile=tiles["compare"][3] if compare_label else None,
         )
 
     with movers_col:

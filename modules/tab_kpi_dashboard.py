@@ -1560,6 +1560,7 @@ def _render_exec_kpi_table(
         ("Sales", "Sales", money),
         ("Units", "Units", lambda v: f"{v:,.0f}"),
         ("Average selling price", "ASP", money),
+        ("SKU count", "Active SKUs", lambda v: f"{v:,.0f}"),
     ]
     esc = html.escape
 

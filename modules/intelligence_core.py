@@ -43,6 +43,7 @@ from . import (
     tab_multi_compare,
     tab_lookup_center,
     tab_state_totals,
+    tab_weekly_goals,
 )
 
 
@@ -356,6 +357,7 @@ def run_app():
                 "Multi Month / Year Compare",
                 "Lookup Center",
                 "State Totals",
+                "Weekly Goals",
                 "Data Management Center",
             ],
             index=0,
@@ -459,6 +461,10 @@ def run_app():
             timeframe = "State Totals"
             compare_mode = "None"
 
+        elif analysis_view == "Weekly Goals":
+            timeframe = "Weekly Goals"
+            compare_mode = "None"
+
         else:
             timeframe = "Multi Selection"
             compare_mode = "None"
@@ -531,6 +537,10 @@ def run_app():
             "scope": scope,
             "scope_pick": scope_pick,
         })
+        return
+
+    if analysis_view == "Weekly Goals":
+        tab_weekly_goals.render({"df_scope": df_scope})
         return
 
     if analysis_view == "Month / Year Compare":

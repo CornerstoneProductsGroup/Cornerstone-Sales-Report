@@ -61,7 +61,6 @@ def apply_global_styles():
     .sales-exec-kpi-table th{font-size:13px;font-weight:700;color:#5b6472;text-align:right;padding:10px 16px;border-bottom:1px solid rgba(203,213,225,0.9);}
     .sales-exec-kpi-table td{font-size:15px;color:#374151;text-align:right;padding:12px 16px;border-bottom:1px solid rgba(226,232,240,0.9);white-space:nowrap;}
     .sales-exec-kpi-table th:first-child,.sales-exec-kpi-table td:first-child{text-align:left;}
-    .sales-exec-kpi-table td.cur{font-weight:800;color:#1f2937;}
     .sales-exec-kpi-table tr:last-child td{border-bottom:none;}
 
     .sales-movers-table{display:flex;flex-direction:column;gap:0;height:540px;}

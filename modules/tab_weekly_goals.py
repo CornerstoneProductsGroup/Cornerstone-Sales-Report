@@ -58,26 +58,12 @@ def _peak_chart(weeks: pd.DataFrame) -> alt.Chart:
         text=alt.Text("y:Q", format="$,.0f"),
         tooltip=[alt.Tooltip("Week:N"), alt.Tooltip("y:Q", title="Sales", format="$,.0f")],
     )
-    return (area + text).properties(height=320)
-
-
-def _target_chart(weeks: pd.DataFrame) -> alt.Chart:
-    data = weeks.assign(Week=weeks["WeekEnd"].dt.strftime("%m/%d"))
-    order = data["Week"].tolist()
-    bars = alt.Chart(data).mark_bar(color=BAR_COLOR).encode(
-        x=alt.X("Week:N", sort=order, title=None, axis=alt.Axis(labelAngle=-45)),
-        y=alt.Y("Sales:Q", title=None, axis=alt.Axis(format="$,.0f")),
-        color=alt.condition(
-            alt.datum.Sales >= WEEKLY_TARGET, alt.value("#2e8b57"), alt.value(BAR_COLOR)
-        ),
-        tooltip=[alt.Tooltip("Week:N"), alt.Tooltip("Sales:Q", format="$,.0f")],
-    )
-    target = pd.DataFrame({"Target": [WEEKLY_TARGET]})
-    rule = alt.Chart(target).mark_rule(color="#d62728", strokeDash=[6, 4], size=2).encode(y="Target:Q")
+    target = pd.DataFrame({"y": [WEEKLY_TARGET]})
+    rule = alt.Chart(target).mark_rule(color="#d62728", strokeDash=[6, 4], size=2).encode(y="y:Q")
     rule_text = alt.Chart(target).mark_text(
         align="left", dx=4, dy=-8, color="#d62728", fontWeight="bold"
-    ).encode(y="Target:Q", x=alt.value(0), text=alt.value(f"Target {money(WEEKLY_TARGET)}"))
-    return (bars + rule + rule_text).properties(height=320)
+    ).encode(y="y:Q", x=alt.value(0), text=alt.value(f"Target {money(WEEKLY_TARGET)}"))
+    return (area + text + rule + rule_text).properties(height=360)
 
 
 def render(ctx: dict):
@@ -106,8 +92,5 @@ def render(ctx: dict):
 
     recent = weeks.tail(WEEKS_SHOWN).reset_index(drop=True)
 
-    st.markdown(f"#### Weekly Sales (last {len(recent)} weeks)")
+    st.markdown(f"#### Weekly Sales vs {money(WEEKLY_TARGET)} Target (last {len(recent)} weeks)")
     st.altair_chart(_peak_chart(recent), use_container_width=True)
-
-    st.markdown(f"#### Weekly Sales vs {money(WEEKLY_TARGET)} Target")
-    st.altair_chart(_target_chart(recent), use_container_width=True)

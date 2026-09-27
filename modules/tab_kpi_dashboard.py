@@ -12,6 +12,7 @@ from .shared_core import (
     new_placement,
     period_from_df,
 )
+from . import tab_weekly_goals
 
 
 def _retailer_logo_url(retailer_name: str) -> str:
@@ -1908,6 +1909,8 @@ def render(ctx: dict):
     vendor_share_change = _prepare_vendor_share_change(dfA, dfB)
     movers = _prepare_top_movers(dfA, dfB)
 
+    tab_weekly_goals.render_goal_strip(df_scope)
+
     left_stack_col, movers_col = st.columns([2.6, 0.75], gap="small")
     with left_stack_col:
         with st.container(border=True):
@@ -1925,6 +1928,8 @@ def render(ctx: dict):
             new_sku_tile=tiles["current"][3],
             lost_sku_tile=tiles["compare"][3] if compare_label else None,
         )
+        with st.container(border=True):
+            tab_weekly_goals.render_target_chart(df_scope)
 
     with movers_col:
         with st.container(border=True):

@@ -71,6 +71,46 @@ def _peak_chart(weeks: pd.DataFrame) -> alt.Chart:
     return (area + rule + rule_text + text).properties(height=360)
 
 
+def _month_to_date(weeks: pd.DataFrame) -> float:
+    latest_week = weeks["WeekEnd"].iloc[-1]
+    # A week counts toward the month its WeekEnd falls in, so the goal resets on the first week of a new month.
+    month_mask = weeks["WeekEnd"].dt.to_period("M") == latest_week.to_period("M")
+    return float(weeks.loc[month_mask, "Sales"].sum())
+
+
+def render_goal_strip(df_scope: pd.DataFrame):
+    weeks = _weekly_totals(df_scope)
+    if weeks.empty:
+        return
+    latest_sales = float(weeks["Sales"].iloc[-1])
+    latest_week = weeks["WeekEnd"].iloc[-1]
+    mtd = _month_to_date(weeks)
+    week_pct = latest_sales / WEEKLY_TARGET
+    month_pct = mtd / MONTHLY_GOAL
+
+    c1, c2, c3 = st.columns(3)
+    with c1, st.container(border=True):
+        st.metric(f"Last Week Total (ending {latest_week:%m/%d/%Y})", money(latest_sales))
+    with c2, st.container(border=True):
+        st.metric(
+            f"Weekly Goal ({money(WEEKLY_TARGET)})",
+            f"{week_pct * 100:,.1f}%",
+            delta=f"{'+' if latest_sales >= WEEKLY_TARGET else '-'}{money(abs(latest_sales - WEEKLY_TARGET))} vs goal",
+        )
+    with c3, st.container(border=True):
+        st.metric(f"{latest_week:%B} Goal ({money(MONTHLY_GOAL)})", f"{month_pct * 100:,.1f}%")
+        st.progress(min(month_pct, 1.0), text=f"{money(mtd)} / {money(MONTHLY_GOAL)}")
+
+
+def render_target_chart(df_scope: pd.DataFrame):
+    weeks = _weekly_totals(df_scope)
+    if weeks.empty:
+        return
+    recent = weeks.tail(WEEKS_SHOWN).reset_index(drop=True)
+    st.markdown(f"#### Weekly Sales vs {money(WEEKLY_TARGET)} Target (last {len(recent)} weeks)")
+    st.altair_chart(_peak_chart(recent), use_container_width=True)
+
+
 def render(ctx: dict):
     st.subheader("Weekly Goals")
     weeks = _weekly_totals(ctx.get("df_scope", pd.DataFrame()))
@@ -80,9 +120,7 @@ def render(ctx: dict):
 
     latest = weeks.iloc[-1]
     latest_week = latest["WeekEnd"]
-    # A week counts toward the month its WeekEnd falls in, so the goal resets on the first week of a new month.
-    month_mask = weeks["WeekEnd"].dt.to_period("M") == latest_week.to_period("M")
-    mtd = float(weeks.loc[month_mask, "Sales"].sum())
+    mtd = _month_to_date(weeks)
     pct = mtd / MONTHLY_GOAL if MONTHLY_GOAL else 0.0
 
     left, _ = st.columns([1, 2])
@@ -95,7 +133,4 @@ def render(ctx: dict):
         )
         st.progress(min(pct, 1.0), text=f"{money(mtd)} / {money(MONTHLY_GOAL)}")
 
-    recent = weeks.tail(WEEKS_SHOWN).reset_index(drop=True)
-
-    st.markdown(f"#### Weekly Sales vs {money(WEEKLY_TARGET)} Target (last {len(recent)} weeks)")
-    st.altair_chart(_peak_chart(recent), use_container_width=True)
+    render_target_chart(ctx.get("df_scope", pd.DataFrame()))

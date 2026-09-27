@@ -111,7 +111,7 @@ def render_goal_strip(df_scope: pd.DataFrame):
         st.metric(f"{latest_week:%B} Goal ({money(MONTHLY_GOAL)})", f"{month_pct * 100:,.1f}%")
         st.progress(min(month_pct, 1.0), text=_progress_text(mtd))
     with c4, st.container(border=True, height=box_height):
-        st.metric(f"{prev_period:%B} Total (Last Full Month)", money(prev_total))
+        st.metric(f"{prev_period.strftime('%B')} Total (Last Full Month)", money(prev_total))
         st.progress(
             min(prev_pct, 1.0),
             text=f"{prev_pct * 100:,.1f}% of {money(MONTHLY_GOAL)} goal".replace("$", "\\$"),

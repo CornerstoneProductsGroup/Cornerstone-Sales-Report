@@ -105,17 +105,17 @@ def render_goal_strip(df_scope: pd.DataFrame):
         st.metric(
             f"Weekly Goal ({money(WEEKLY_TARGET)})",
             f"{week_pct * 100:,.1f}%",
-            delta=f"{'+' if latest_sales >= WEEKLY_TARGET else '-'
+            delta=f"{'+' if latest_sales >= WEEKLY_TARGET else '-'}{money(abs(latest_sales - WEEKLY_TARGET))} vs goal",
+        )
+    with c3, st.container(border=True, height=box_height):
+        st.metric(f"{latest_week:%B} Goal ({money(MONTHLY_GOAL)})", f"{month_pct * 100:,.1f}%")
+        st.progress(min(month_pct, 1.0), text=_progress_text(mtd))
     with c4, st.container(border=True, height=box_height):
         st.metric(f"{prev_period:%B} Total (Last Full Month)", money(prev_total))
         st.progress(
             min(prev_pct, 1.0),
             text=f"{prev_pct * 100:,.1f}% of {money(MONTHLY_GOAL)} goal".replace("$", "\\$"),
-        )}{money(abs(latest_sales - WEEKLY_TARGET))} vs goal",
         )
-    with c3, st.container(border=True, height=box_height):
-        st.metric(f"{latest_week:%B} Goal ({money(MONTHLY_GOAL)})", f"{month_pct * 100:,.1f}%")
-        st.progress(min(month_pct, 1.0), text=_progress_text(mtd))
 
 
 def render_target_chart(df_scope: pd.DataFrame):

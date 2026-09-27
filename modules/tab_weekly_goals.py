@@ -78,6 +78,11 @@ def _month_to_date(weeks: pd.DataFrame) -> float:
     return float(weeks.loc[month_mask, "Sales"].sum())
 
 
+def _progress_text(mtd: float) -> str:
+    # Progress text is markdown; escape $ so a pair isn't rendered as LaTeX.
+    return f"{money(mtd)} / {money(MONTHLY_GOAL)}".replace("$", "\\$")
+
+
 def render_goal_strip(df_scope: pd.DataFrame):
     weeks = _weekly_totals(df_scope)
     if weeks.empty:
@@ -88,18 +93,19 @@ def render_goal_strip(df_scope: pd.DataFrame):
     week_pct = latest_sales / WEEKLY_TARGET
     month_pct = mtd / MONTHLY_GOAL
 
+    box_height = 175
     c1, c2, c3 = st.columns(3)
-    with c1, st.container(border=True):
+    with c1, st.container(border=True, height=box_height):
         st.metric(f"Last Week Total (ending {latest_week:%m/%d/%Y})", money(latest_sales))
-    with c2, st.container(border=True):
+    with c2, st.container(border=True, height=box_height):
         st.metric(
             f"Weekly Goal ({money(WEEKLY_TARGET)})",
             f"{week_pct * 100:,.1f}%",
             delta=f"{'+' if latest_sales >= WEEKLY_TARGET else '-'}{money(abs(latest_sales - WEEKLY_TARGET))} vs goal",
         )
-    with c3, st.container(border=True):
+    with c3, st.container(border=True, height=box_height):
         st.metric(f"{latest_week:%B} Goal ({money(MONTHLY_GOAL)})", f"{month_pct * 100:,.1f}%")
-        st.progress(min(month_pct, 1.0), text=f"{money(mtd)} / {money(MONTHLY_GOAL)}")
+        st.progress(min(month_pct, 1.0), text=_progress_text(mtd))
 
 
 def render_target_chart(df_scope: pd.DataFrame):
@@ -131,6 +137,6 @@ def render(ctx: dict):
             f"{pct * 100:,.1f}%",
             help=f"{money(mtd)} of {money(MONTHLY_GOAL)} monthly goal",
         )
-        st.progress(min(pct, 1.0), text=f"{money(mtd)} / {money(MONTHLY_GOAL)}")
+        st.progress(min(pct, 1.0), text=_progress_text(mtd))
 
     render_target_chart(ctx.get("df_scope", pd.DataFrame()))

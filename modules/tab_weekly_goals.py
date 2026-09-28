@@ -98,19 +98,21 @@ def render_goal_strip(df_scope: pd.DataFrame):
     prev_total = float(weeks.loc[weeks["WeekEnd"].dt.to_period("M") == prev_period, "Sales"].sum())
     prev_pct = prev_total / MONTHLY_GOAL
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3 = st.columns(3)
     with c1, st.container(border=True, height=box_height):
-        st.metric(f"Last Week Total (ending {latest_week:%m/%d/%Y})", money(latest_sales))
-    with c2, st.container(border=True, height=box_height):
         st.metric(
-            f"Weekly Goal ({money(WEEKLY_TARGET)})",
-            f"{week_pct * 100:,.1f}%",
+            f"Last Week Total (ending {latest_week:%m/%d/%Y})",
+            money(latest_sales),
             delta=f"{'+' if latest_sales >= WEEKLY_TARGET else '-'}{money(abs(latest_sales - WEEKLY_TARGET))} vs goal",
         )
-    with c3, st.container(border=True, height=box_height):
+        st.progress(
+            min(week_pct, 1.0),
+            text=f"{week_pct * 100:,.1f}% of {money(WEEKLY_TARGET)} weekly goal".replace("$", "\\$"),
+        )
+    with c2, st.container(border=True, height=box_height):
         st.metric(f"{latest_week:%B} Goal ({money(MONTHLY_GOAL)})", f"{month_pct * 100:,.1f}%")
         st.progress(min(month_pct, 1.0), text=_progress_text(mtd))
-    with c4, st.container(border=True, height=box_height):
+    with c3, st.container(border=True, height=box_height):
         st.metric(f"{prev_period.strftime('%B')} Total (Last Full Month)", money(prev_total))
         st.progress(
             min(prev_pct, 1.0),

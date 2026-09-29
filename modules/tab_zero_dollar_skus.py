@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from .shared_core import load_store, update_sku_price
+from .shared_core import DEFAULT_VENDOR_MAP, load_store, update_sku_price
 
 
 def build_zero_sales_detail(df: pd.DataFrame) -> pd.DataFrame:
@@ -82,7 +82,7 @@ def render(ctx: dict):
     metric_cols[3].metric("Pricing Issues", f"{len(actionable):,}")
 
     if not actionable.empty:
-        st.markdown("### Add Missing Price")
+        st.markdown("### Update Price and Display SKU")
         sku_counts = actionable.groupby("SKU").size().sort_values(ascending=False)
         selected_sku = st.selectbox(
             "SKU",
@@ -110,11 +110,16 @@ def render(ctx: dict):
                 step=0.01,
                 format="%.2f",
             )
+            new_display_sku = st.text_input(
+                "Display SKU",
+                value=selected_sku,
+                help="The original source SKU stays unchanged so future uploads continue to match.",
+            )
             st.caption(
                 f"Updates {affected_records:,} existing record(s) totaling {affected_units:,.0f} units "
                 f"for {selected_retailer}."
             )
-            save_price = st.form_submit_button("Save Price", use_container_width=True)
+            save_price = st.form_submit_button("Save Price and Display SKU", use_container_width=True)
 
         if save_price:
             try:
@@ -123,10 +128,12 @@ def render(ctx: dict):
                     selected_sku,
                     new_price,
                     selected_vendor,
+                    new_display_sku,
                 )
                 map_note = "updated" if map_rows else "added"
                 st.session_state["zero_sales_price_saved"] = (
-                    f"Price saved. Vendor-map entry {map_note}; {store_rows:,} backup row(s) updated."
+                    f"Price and display SKU saved. Vendor-map entry {map_note}; "
+                    f"{store_rows:,} backup row(s) updated."
                 )
                 st.rerun()
             except Exception as exc:
@@ -140,6 +147,14 @@ def render(ctx: dict):
         mime="text/csv",
         use_container_width=True,
     )
+    if DEFAULT_VENDOR_MAP.exists():
+        st.download_button(
+            "Download Updated Vendor Map",
+            data=DEFAULT_VENDOR_MAP.read_bytes(),
+            file_name="vendor_map.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
 
     reason_options = ["All"] + sorted(detail["Reason"].dropna().unique().tolist())
     selected_reason = st.segmented_control(

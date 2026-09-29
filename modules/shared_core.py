@@ -120,15 +120,17 @@ def update_sku_price(
     sku: str,
     price: float,
     vendor: str = "Unknown",
+    display_sku: str = "",
     *,
     vendor_map_path: Path = DEFAULT_VENDOR_MAP,
     store_path: Path = DEFAULT_STORE_CSV,
 ) -> Tuple[int, int]:
-    """Persist a retailer/SKU price in the vendor map and matching sales backup rows."""
+    """Persist a retailer/SKU price and optional display name without changing the source SKU."""
     from openpyxl import load_workbook
 
     target_retailer = norm_retailer(retailer)
     target_sku = norm_sku(sku)
+    target_display_sku = norm_sku(display_sku)
     numeric_price = float(price)
     if not target_retailer or not target_sku:
         raise ValueError("Retailer and SKU are required.")
@@ -168,6 +170,8 @@ def update_sku_price(
         display_sku = norm_sku(sheet.cell(row=row, column=headers["Display SKU"]).value)
         if row_retailer == target_retailer and target_sku in {row_sku, display_sku}:
             sheet.cell(row=row, column=headers["Price"], value=numeric_price)
+            if target_display_sku:
+                sheet.cell(row=row, column=headers["Display SKU"], value=target_display_sku)
             matched_rows.append(row)
             source_skus.add(row_sku)
 
@@ -177,6 +181,8 @@ def update_sku_price(
         sheet.cell(row=new_row, column=headers["SKU"], value=target_sku)
         sheet.cell(row=new_row, column=headers["Price"], value=numeric_price)
         sheet.cell(row=new_row, column=headers["Vendor"], value="" if vendor == "Unknown" else vendor)
+        if target_display_sku:
+            sheet.cell(row=new_row, column=headers["Display SKU"], value=target_display_sku)
         source_skus.add(target_sku)
 
     workbook.save(vendor_map_path)

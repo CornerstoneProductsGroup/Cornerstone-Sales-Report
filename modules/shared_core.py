@@ -469,7 +469,7 @@ def append_missed_sales_rows(store: pd.DataFrame, new_rows: pd.DataFrame) -> pd.
 
 def load_vendor_map() -> pd.DataFrame:
     if not DEFAULT_VENDOR_MAP.exists():
-        return pd.DataFrame(columns=["Retailer","SKU","Price","Vendor"])
+        return pd.DataFrame(columns=["Retailer","SKU","Price","Vendor","Display SKU"])
     df = pd.read_excel(DEFAULT_VENDOR_MAP, sheet_name=0, engine="openpyxl")
     # Minimal standardization
     for c in ["Retailer","SKU","Vendor"]:
@@ -481,7 +481,10 @@ def load_vendor_map() -> pd.DataFrame:
         df["SKU"] = df["SKU"].map(norm_sku)
     if "Price" in df.columns:
         df["Price"] = pd.to_numeric(df["Price"], errors="coerce")
-    return df[["Retailer","SKU","Price","Vendor"]].copy()
+    if "Display SKU" not in df.columns:
+        df["Display SKU"] = ""
+    df["Display SKU"] = df["Display SKU"].fillna("").astype(str).str.strip()
+    return df[["Retailer","SKU","Price","Vendor","Display SKU"]].copy()
 
 def enrich_sales(df_raw: pd.DataFrame, vm: pd.DataFrame) -> pd.DataFrame:
     """Return a fully-enriched fact table with Vendor, Price, Sales, and a weekly key."""
@@ -501,6 +504,9 @@ def enrich_sales(df_raw: pd.DataFrame, vm: pd.DataFrame) -> pd.DataFrame:
     df["UnitPrice"] = pd.to_numeric(df.get("UnitPrice"), errors="coerce")
     df["Price"] = np.where(df["UnitPrice"].notna(), df["UnitPrice"], df["Price"])
     df["Sales"] = df["Units"] * df["Price"].fillna(0.0)
+    display_sku = df["Display SKU"].fillna("").astype(str).str.strip()
+    df["SKU"] = display_sku.where(display_sku.ne(""), df["SKU"]).map(norm_sku)
+    df = df.drop(columns=["Display SKU"])
 
     df["Vendor"] = df["Vendor"].fillna("Unknown").astype(str).str.strip()
     df["StartDate"] = pd.to_datetime(df["StartDate"], errors="coerce")

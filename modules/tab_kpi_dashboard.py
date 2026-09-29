@@ -916,7 +916,7 @@ def _format_week_date(value) -> str:
 
 def _series_by_week(df: pd.DataFrame, metric: str = "Sales", last_n: int | None = None) -> pd.DataFrame:
     if df.empty or metric not in df.columns or "WeekEnd" not in df.columns:
-        return pd.DataFrame(columns=["WeekIndex", "Week Label", "Value"])
+        return pd.DataFrame(columns=["WeekIndex", "Week Label", "WeekEnd", "Value"])
 
     weekly = (
         df.groupby("WeekEnd", as_index=False)
@@ -929,7 +929,7 @@ def _series_by_week(df: pd.DataFrame, metric: str = "Sales", last_n: int | None 
         weekly = weekly.tail(last_n).reset_index(drop=True)
 
     if weekly.empty:
-        return pd.DataFrame(columns=["WeekIndex", "Week Label", "Value"])
+        return pd.DataFrame(columns=["WeekIndex", "Week Label", "WeekEnd", "Value"])
 
     if last_n is not None and last_n > 0:
         start_idx = max(1, last_n - len(weekly) + 1)
@@ -938,7 +938,7 @@ def _series_by_week(df: pd.DataFrame, metric: str = "Sales", last_n: int | None 
 
     weekly["WeekIndex"] = range(start_idx, start_idx + len(weekly))
     weekly["Week Label"] = weekly["WeekIndex"].map(lambda idx: f"Week {idx}")
-    return weekly[["WeekIndex", "Week Label", "Value"]]
+    return weekly[["WeekIndex", "Week Label", "WeekEnd", "Value"]]
 
 
 def _prepare_weekly_trend(df_current: pd.DataFrame, df_compare: pd.DataFrame, current_label: str, compare_label: str | None) -> pd.DataFrame:
@@ -946,7 +946,7 @@ def _prepare_weekly_trend(df_current: pd.DataFrame, df_compare: pd.DataFrame, cu
     current_weekly = _series_by_week(df_current, "Sales", last_n=target_weeks)
     compare_weekly = _series_by_week(df_compare, "Sales", last_n=target_weeks)
     if current_weekly.empty and (compare_weekly.empty or not compare_label):
-        return pd.DataFrame(columns=["Week Label", "Series", "Sales"])
+        return pd.DataFrame(columns=["WeekIndex", "Week Label", "WeekEnd", "Series", "Sales"])
 
     current_lookup = dict(zip(current_weekly["WeekIndex"], current_weekly["Value"]))
     compare_lookup = dict(zip(compare_weekly["WeekIndex"], compare_weekly["Value"]))
@@ -957,7 +957,11 @@ def _prepare_weekly_trend(df_current: pd.DataFrame, df_compare: pd.DataFrame, cu
         current_value = current_lookup.get(idx)
         rows.append(
             {
+                "WeekIndex": idx,
                 "Week Label": week_label,
+                "WeekEnd": current_weekly.loc[current_weekly["WeekIndex"] == idx, "WeekEnd"].iloc[0]
+                if current_value is not None
+                else pd.NaT,
                 "Series": current_label,
                 "Sales": float(current_value) if current_value is not None else float("nan"),
             }
@@ -966,7 +970,11 @@ def _prepare_weekly_trend(df_current: pd.DataFrame, df_compare: pd.DataFrame, cu
             compare_value = compare_lookup.get(idx)
             rows.append(
                 {
+                    "WeekIndex": idx,
                     "Week Label": week_label,
+                    "WeekEnd": compare_weekly.loc[compare_weekly["WeekIndex"] == idx, "WeekEnd"].iloc[0]
+                    if compare_value is not None
+                    else pd.NaT,
                     "Series": compare_label,
                     "Sales": float(compare_value) if compare_value is not None else float("nan"),
                 }
@@ -1635,17 +1643,90 @@ def _weekly_sales_trend_chart(df: pd.DataFrame, current_label: str, compare_labe
 
     domain = [current_label] + ([compare_label] if compare_label else [])
     color_range = ["#2b78d0", "#7f93b0"] if compare_label else ["#2b78d0"]
-    return (
+    selection = alt.selection_point(
+        name="weekly_point",
+        fields=["WeekIndex", "Series"],
+        on="click",
+        toggle=True,
+    )
+    base = (
         alt.Chart(df)
-        .mark_line(point=alt.OverlayMarkDef(size=70, filled=True))
         .encode(
             x=alt.X("Week Label:N", sort=None, title=None, axis=alt.Axis(labelAngle=0)),
             y=alt.Y("Sales:Q", title=None, axis=alt.Axis(format="$,.0s", gridColor="#e5e7eb")),
             color=alt.Color("Series:N", scale=alt.Scale(domain=domain, range=color_range), legend=alt.Legend(title=None, orient="bottom")),
-            tooltip=[alt.Tooltip("Series:N"), alt.Tooltip("Week Label:N", title="Week"), alt.Tooltip("Sales:Q", format=",.0f")],
+            tooltip=[
+                alt.Tooltip("Series:N"),
+                alt.Tooltip("Week Label:N", title="Week"),
+                alt.Tooltip("WeekEnd:T", title="Week ending"),
+                alt.Tooltip("Sales:Q", format=",.0f"),
+            ],
         )
-        .properties(height=230)
     )
+    lines = base.mark_line()
+    points = base.mark_point(size=75, filled=True).add_params(selection)
+    return (lines + points).properties(height=230)
+
+
+def _render_selected_week_detail(
+    selected_points: list[dict],
+    trend: pd.DataFrame,
+    df_current: pd.DataFrame,
+    df_compare: pd.DataFrame,
+    current_label: str,
+    compare_label: str | None,
+):
+    if not selected_points:
+        return
+
+    selected = selected_points[0]
+    try:
+        week_index = int(selected.get("WeekIndex"))
+    except (TypeError, ValueError):
+        return
+    series = str(selected.get("Series", ""))
+    selected_row = trend[(trend["WeekIndex"] == week_index) & (trend["Series"] == series)]
+    if selected_row.empty:
+        return
+
+    week_end = pd.to_datetime(selected_row.iloc[0]["WeekEnd"], errors="coerce")
+    source = df_current if series == current_label else df_compare if series == compare_label else pd.DataFrame()
+    if source.empty or pd.isna(week_end) or "WeekEnd" not in source.columns:
+        return
+
+    source = source.copy()
+    source["WeekEnd"] = pd.to_datetime(source["WeekEnd"], errors="coerce")
+    week_df = source[source["WeekEnd"] == week_end].copy()
+    if week_df.empty:
+        return
+
+    sales = float(pd.to_numeric(week_df.get("Sales", 0.0), errors="coerce").fillna(0.0).sum())
+    units = float(pd.to_numeric(week_df.get("Units", 0.0), errors="coerce").fillna(0.0).sum())
+    asp = sales / units if units else 0.0
+    st.markdown(f"##### {series}: Week {week_index} ending {week_end:%m/%d/%Y}")
+    metric_cols = st.columns(3)
+    metric_cols[0].metric("Sales", money(sales))
+    metric_cols[1].metric("Units", f"{units:,.0f}")
+    metric_cols[2].metric("ASP", money(asp))
+
+    breakdown_cols = st.columns(3)
+    breakdown_specs = [("Retailer", "Retailer"), ("Vendor", "Vendor"), ("Top SKUs", "SKU")]
+    for column, (title, field) in zip(breakdown_cols, breakdown_specs):
+        with column:
+            st.markdown(f"**{title}**")
+            if field not in week_df.columns:
+                st.caption("No data available")
+                continue
+            breakdown = (
+                week_df.groupby(field, dropna=False, as_index=False)
+                .agg(Sales=("Sales", "sum"), Units=("Units", "sum"))
+                .sort_values("Sales", ascending=False)
+                .head(6)
+            )
+            breakdown[field] = breakdown[field].fillna("Unknown")
+            breakdown["Sales"] = breakdown["Sales"].map(money)
+            breakdown["Units"] = breakdown["Units"].map(lambda value: f"{value:,.0f}")
+            st.dataframe(breakdown, hide_index=True, use_container_width=True)
 
 
 def _top_sku_chart(df: pd.DataFrame):
@@ -1919,7 +2000,21 @@ def render(ctx: dict):
             if trend_chart is None:
                 st.info("No weekly trend data available for the selected timeframe.")
             else:
-                st.altair_chart(trend_chart, use_container_width=True)
+                chart_event = st.altair_chart(
+                    trend_chart,
+                    use_container_width=True,
+                    on_select="rerun",
+                    selection_mode="points",
+                )
+                selected_points = chart_event.selection.get("weekly_point", [])
+                _render_selected_week_detail(
+                    selected_points=selected_points,
+                    trend=weekly_trend,
+                    df_current=dfA,
+                    df_compare=dfB,
+                    current_label=current_label,
+                    compare_label=compare_label,
+                )
         _render_exec_kpi_table(
             kA=kA,
             kB=kB,

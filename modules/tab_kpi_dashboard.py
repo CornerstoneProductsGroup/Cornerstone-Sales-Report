@@ -1724,50 +1724,51 @@ def _render_selected_week_detail(
     if selected_row.empty:
         return
 
-    week_end = pd.to_datetime(selected_row.iloc[0]["WeekEnd"], errors="coerce")
-    source = df_current if series == current_label else df_compare if series == compare_label else pd.DataFrame()
-    if source.empty or pd.isna(week_end) or "WeekEnd" not in source.columns:
-        return
-
-    source = source.copy()
-    source["WeekEnd"] = pd.to_datetime(source["WeekEnd"], errors="coerce")
-    week_df = source[source["WeekEnd"] == week_end].copy()
-    if week_df.empty:
-        return
-
-    sales = float(pd.to_numeric(week_df.get("Sales", 0.0), errors="coerce").fillna(0.0).sum())
-    units = float(pd.to_numeric(week_df.get("Units", 0.0), errors="coerce").fillna(0.0).sum())
-    asp = sales / units if units else 0.0
     heading_col, close_col = st.columns([12, 1])
     with heading_col:
-        st.markdown(f"##### {series}: Week {week_index} ending {week_end:%m/%d/%Y}")
+        st.markdown(f"##### Week {week_index}" if compare_label else f"##### {series}: Week {week_index}")
     with close_col:
         if st.button("X", key="weekly_trend_close", help="Close selected week details"):
             st.session_state["weekly_trend_dismissed"] = (series, week_index)
             st.rerun()
-    metric_cols = st.columns(3)
-    metric_cols[0].metric("Sales", money(sales))
-    metric_cols[1].metric("Units", f"{units:,.0f}")
-    metric_cols[2].metric("ASP", money(asp))
 
-    breakdown_cols = st.columns(3)
-    breakdown_specs = [("Retailer", "Retailer"), ("Vendor", "Vendor"), ("Top SKUs", "SKU")]
-    for column, (title, field) in zip(breakdown_cols, breakdown_specs):
+    periods = [(current_label, df_current)]
+    if compare_label:
+        periods.append((compare_label, df_compare))
+    detail_cols = st.columns(len(periods))
+    for column, (label, source) in zip(detail_cols, periods):
         with column:
-            st.markdown(f"**{title}**")
-            if field not in week_df.columns:
-                st.caption("No data available")
+            matched = trend[(trend["WeekIndex"] == week_index) & (trend["Series"] == label)]
+            week_end = pd.to_datetime(matched.iloc[0]["WeekEnd"], errors="coerce") if not matched.empty else pd.NaT
+            if pd.isna(week_end) or source.empty or "WeekEnd" not in source.columns:
+                st.markdown(f"**{label}**")
+                st.caption("No sales for this week")
                 continue
-            breakdown = (
-                week_df.groupby(field, dropna=False, as_index=False)
-                .agg(Sales=("Sales", "sum"), Units=("Units", "sum"))
-                .sort_values("Sales", ascending=False)
-                .head(6)
-            )
-            breakdown[field] = breakdown[field].fillna("Unknown")
-            breakdown["Sales"] = breakdown["Sales"].map(money)
-            breakdown["Units"] = breakdown["Units"].map(lambda value: f"{value:,.0f}")
-            st.dataframe(breakdown, hide_index=True, use_container_width=True)
+
+            week_df = source[pd.to_datetime(source["WeekEnd"], errors="coerce") == week_end]
+            st.markdown(f"**{label} - ending {week_end:%m/%d/%Y}**")
+            sales = float(pd.to_numeric(week_df["Sales"], errors="coerce").fillna(0.0).sum())
+            units = float(pd.to_numeric(week_df["Units"], errors="coerce").fillna(0.0).sum())
+            metric_cols = st.columns(3)
+            metric_cols[0].metric("Sales", money(sales))
+            metric_cols[1].metric("Units", f"{units:,.0f}")
+            metric_cols[2].metric("ASP", money(sales / units if units else 0.0))
+
+            for title, field in [("Retailer", "Retailer"), ("Vendor", "Vendor"), ("Top SKUs", "SKU")]:
+                st.markdown(f"**{title}**")
+                if field not in week_df.columns:
+                    st.caption("No data available")
+                    continue
+                breakdown = (
+                    week_df.groupby(field, dropna=False, as_index=False)
+                    .agg(Sales=("Sales", "sum"), Units=("Units", "sum"))
+                    .sort_values("Sales", ascending=False)
+                    .head(6)
+                )
+                breakdown[field] = breakdown[field].fillna("Unknown")
+                breakdown["Sales"] = breakdown["Sales"].map(money)
+                breakdown["Units"] = breakdown["Units"].map(lambda value: f"{value:,.0f}")
+                st.dataframe(breakdown, hide_index=True, use_container_width=True)
 
 
 def _top_sku_chart(df: pd.DataFrame):

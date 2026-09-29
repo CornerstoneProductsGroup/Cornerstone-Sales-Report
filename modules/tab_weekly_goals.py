@@ -94,11 +94,8 @@ def render_goal_strip(df_scope: pd.DataFrame):
     month_pct = mtd / MONTHLY_GOAL
 
     box_height = 175
-    prev_period = latest_week.to_period("M") - 1
-    prev_total = float(weeks.loc[weeks["WeekEnd"].dt.to_period("M") == prev_period, "Sales"].sum())
-    prev_pct = prev_total / MONTHLY_GOAL
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2 = st.columns(2)
     with c1, st.container(border=True, height=box_height):
         st.metric(
             f"Last Week Total (ending {latest_week:%m/%d/%Y})",
@@ -112,23 +109,17 @@ def render_goal_strip(df_scope: pd.DataFrame):
     with c2, st.container(border=True, height=box_height):
         st.metric(f"{latest_week:%B} Goal ({money(MONTHLY_GOAL)})", f"{month_pct * 100:,.1f}%")
         st.progress(min(month_pct, 1.0), text=_progress_text(mtd))
-    with c3, st.container(border=True, height=box_height):
-        st.metric(f"{prev_period.strftime('%B')} Total (Last Full Month)", money(prev_total))
-        st.progress(
-            min(prev_pct, 1.0),
-            text=f"{prev_pct * 100:,.1f}% of {money(MONTHLY_GOAL)} goal".replace("$", "\\$"),
-        )
 
 
 def render_recent_month_goals(df_scope: pd.DataFrame):
     weeks = _weekly_totals(df_scope)
-    st.markdown("#### Last 4 Months vs Goal")
+    st.markdown("#### Last 6 Months vs Goal")
     if weeks.empty:
         st.info("No monthly sales available.")
         return
 
     months = weeks.groupby(weeks["WeekEnd"].dt.to_period("M"))["Sales"].sum()
-    recent = pd.period_range(end=weeks["WeekEnd"].iloc[-1].to_period("M"), periods=4, freq="M")
+    recent = pd.period_range(end=weeks["WeekEnd"].iloc[-1].to_period("M"), periods=6, freq="M")
     for month, sales in months.reindex(recent, fill_value=0.0).items():
         pct = sales / MONTHLY_GOAL
         st.markdown(f"**{month.strftime('%b %Y')}**")

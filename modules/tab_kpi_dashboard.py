@@ -2023,10 +2023,19 @@ def render(ctx: dict):
     vendor_share_change = _prepare_vendor_share_change(dfA, dfB)
     movers = _prepare_top_movers(dfA, dfB)
 
-    tab_weekly_goals.render_goal_strip(df_scope)
-
-    left_stack_col, movers_col = st.columns([2.6, 0.75], gap="small", vertical_alignment="bottom")
+    st.markdown("""
+        <style>
+        [data-testid="stColumn"]:has(.st-key-standard_top_movers) > [data-testid="stVerticalBlock"] {
+            height: 100%;
+        }
+        [data-testid="stColumn"]:has(.st-key-standard_top_movers) > [data-testid="stVerticalBlock"] > :last-child {
+            margin-top: auto;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    left_stack_col, movers_col = st.columns([2.6, 0.75], gap="small")
     with left_stack_col:
+        tab_weekly_goals.render_goal_strip(df_scope)
         with st.container(border=True):
             st.markdown("#### Weekly Sales Trend")
             trend_chart = _weekly_sales_trend_chart(weekly_trend, current_label, compare_label)
@@ -2066,7 +2075,7 @@ def render(ctx: dict):
     with movers_col:
         with st.container(border=True):
             tab_weekly_goals.render_recent_month_goals(df_scope)
-        with st.container(border=True):
+        with st.container(border=True, key="standard_top_movers"):
             st.markdown("#### Top Movers")
             _render_movers_panel(movers)
 

@@ -120,6 +120,24 @@ def render_goal_strip(df_scope: pd.DataFrame):
         )
 
 
+def render_recent_month_goals(df_scope: pd.DataFrame):
+    weeks = _weekly_totals(df_scope)
+    st.markdown("#### Last 4 Months vs Goal")
+    if weeks.empty:
+        st.info("No monthly sales available.")
+        return
+
+    months = weeks.groupby(weeks["WeekEnd"].dt.to_period("M"))["Sales"].sum()
+    recent = pd.period_range(end=weeks["WeekEnd"].iloc[-1].to_period("M"), periods=4, freq="M")
+    for month, sales in months.reindex(recent, fill_value=0.0).items():
+        pct = sales / MONTHLY_GOAL
+        st.markdown(f"**{month.strftime('%b %Y')}**")
+        st.progress(
+            min(pct, 1.0),
+            text=f"{money(sales)} / {money(MONTHLY_GOAL)} ({pct * 100:,.0f}%)".replace("$", "\\$"),
+        )
+
+
 def render_target_chart(df_scope: pd.DataFrame):
     weeks = _weekly_totals(df_scope)
     if weeks.empty:

@@ -2065,6 +2065,8 @@ def render(ctx: dict):
 
     with movers_col:
         with st.container(border=True):
+            tab_weekly_goals.render_recent_month_goals(df_scope)
+        with st.container(border=True):
             st.markdown("#### Top Movers")
             _render_movers_panel(movers)
 

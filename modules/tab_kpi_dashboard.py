@@ -2025,7 +2025,7 @@ def render(ctx: dict):
 
     tab_weekly_goals.render_goal_strip(df_scope)
 
-    left_stack_col, movers_col = st.columns([2.6, 0.75], gap="small")
+    left_stack_col, movers_col = st.columns([2.6, 0.75], gap="small", vertical_alignment="bottom")
     with left_stack_col:
         with st.container(border=True):
             st.markdown("#### Weekly Sales Trend")

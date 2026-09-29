@@ -283,13 +283,18 @@ def replace_store_rows_for_uploaded_weeks(existing: pd.DataFrame, new_rows: pd.D
         if "SKU" in frame.columns:
             frame["SKU"] = frame["SKU"].map(norm_sku)
 
-    target_keys = incoming[["Retailer", "StartDate", "EndDate"]].drop_duplicates()
-    trimmed = current.merge(
-        target_keys.assign(_replace=True),
+    # A weekly workbook is the full picture for its week: retailers missing from it had no sales,
+    # so drop every existing row for that week (keeping manual corrections for retailers not in the upload).
+    target_weeks = incoming[["StartDate", "EndDate"]].drop_duplicates()
+    trimmed = current.merge(target_weeks.assign(_week=True), on=["StartDate", "EndDate"], how="left")
+    trimmed = trimmed.merge(
+        incoming[["Retailer", "StartDate", "EndDate"]].drop_duplicates().assign(_retailer=True),
         on=["Retailer", "StartDate", "EndDate"],
         how="left",
     )
-    trimmed = trimmed[trimmed["_replace"].isna()].drop(columns=["_replace"])
+    is_manual = trimmed.get("SourceFile", pd.Series("", index=trimmed.index)).astype(str).str.startswith("Manual Correction::")
+    drop = trimmed["_week"].notna() & (~is_manual | trimmed["_retailer"].notna())
+    trimmed = trimmed[~drop].drop(columns=["_week", "_retailer"])
 
     combined = pd.concat([trimmed, incoming], ignore_index=True)
     combined = combined.drop_duplicates(

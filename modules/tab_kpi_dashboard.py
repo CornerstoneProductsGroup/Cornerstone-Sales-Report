@@ -942,7 +942,10 @@ def _series_by_week(df: pd.DataFrame, metric: str = "Sales", last_n: int | None 
 
 
 def _prepare_weekly_trend(df_current: pd.DataFrame, df_compare: pd.DataFrame, current_label: str, compare_label: str | None) -> pd.DataFrame:
-    target_weeks = 8
+    target_weeks = max(
+        df_current["WeekEnd"].nunique() if "WeekEnd" in df_current else 0,
+        df_compare["WeekEnd"].nunique() if compare_label and "WeekEnd" in df_compare else 0,
+    )
     current_weekly = _series_by_week(df_current, "Sales", last_n=target_weeks)
     compare_weekly = _series_by_week(df_compare, "Sales", last_n=target_weeks)
     if current_weekly.empty and (compare_weekly.empty or not compare_label):
@@ -1641,6 +1644,8 @@ def _weekly_sales_trend_chart(df: pd.DataFrame, current_label: str, compare_labe
     if df.empty:
         return None
 
+    week_count = int(df["WeekIndex"].max())
+    label_step = max(1, (week_count + 7) // 8)
     domain = [current_label] + ([compare_label] if compare_label else [])
     color_range = ["#2b78d0", "#7f93b0"] if compare_label else ["#2b78d0"]
     selection = alt.selection_point(
@@ -1652,7 +1657,10 @@ def _weekly_sales_trend_chart(df: pd.DataFrame, current_label: str, compare_labe
     base = (
         alt.Chart(df)
         .encode(
-            x=alt.X("Week Label:N", sort=None, title=None, axis=alt.Axis(labelAngle=0)),
+            x=alt.X("Week Label:N", sort=None, title=None, axis=alt.Axis(
+                labelAngle=0,
+                values=[f"Week {idx}" for idx in range(1, week_count + 1, label_step)],
+            )),
             y=alt.Y("Sales:Q", title=None, axis=alt.Axis(format="$,.0s", gridColor="#e5e7eb")),
             color=alt.Color("Series:N", scale=alt.Scale(domain=domain, range=color_range), legend=alt.Legend(title=None, orient="bottom")),
             tooltip=[
@@ -2070,7 +2078,7 @@ def render(ctx: dict):
             lost_sku_tile=tiles["compare"][3] if compare_label else None,
         )
         with st.container(border=True):
-            tab_weekly_goals.render_target_chart(df_scope)
+            tab_weekly_goals.render_target_chart(dfA, show_all=True)
 
     with movers_col:
         with st.container(border=True):

@@ -26,6 +26,7 @@ def _weekly_totals(df: pd.DataFrame) -> pd.DataFrame:
 
 def _peak_chart(weeks: pd.DataFrame) -> alt.Chart:
     labels = weeks["WeekEnd"].dt.strftime("%m/%d").tolist()
+    label_step = max(1, (len(labels) + 7) // 8)
     half = 0.32
     rows = []
     for i, sales in enumerate(weeks["Sales"].tolist()):
@@ -43,7 +44,7 @@ def _peak_chart(weeks: pd.DataFrame) -> alt.Chart:
     peaks["label_y"] = peaks["y"].where(~collides, WEEKLY_TARGET + 0.02 * y_top)
 
     x_axis = alt.Axis(
-        values=list(range(len(labels))),
+        values=list(range(0, len(labels), label_step)),
         labelExpr=f"{json.dumps(labels)}[datum.value]",
         labelAngle=-45,
         grid=False,
@@ -57,7 +58,7 @@ def _peak_chart(weeks: pd.DataFrame) -> alt.Chart:
         y=y_enc,
         detail="week:N",
     )
-    text = alt.Chart(peaks).mark_text(dy=-10, color="#444", fontWeight="bold").encode(
+    text = alt.Chart(peaks.iloc[::label_step]).mark_text(dy=-10, color="#444", fontWeight="bold").encode(
         x=alt.X("x:Q", scale=x_scale),
         y=alt.Y("label_y:Q", title=None),
         text=alt.Text("y:Q", format="$,.0f"),
@@ -113,13 +114,13 @@ def render_goal_strip(df_scope: pd.DataFrame):
 
 def render_recent_month_goals(df_scope: pd.DataFrame):
     weeks = _weekly_totals(df_scope)
-    st.markdown("#### Last 6 Months vs Goal")
+    st.markdown("#### Last 7 Months vs Goal")
     if weeks.empty:
         st.info("No monthly sales available.")
         return
 
     months = weeks.groupby(weeks["WeekEnd"].dt.to_period("M"))["Sales"].sum()
-    recent = pd.period_range(end=weeks["WeekEnd"].iloc[-1].to_period("M"), periods=6, freq="M")
+    recent = pd.period_range(end=weeks["WeekEnd"].iloc[-1].to_period("M"), periods=7, freq="M")
     for month, sales in months.reindex(recent, fill_value=0.0).items():
         pct = sales / MONTHLY_GOAL
         st.markdown(f"**{month.strftime('%b %Y')}**")
@@ -129,11 +130,11 @@ def render_recent_month_goals(df_scope: pd.DataFrame):
         )
 
 
-def render_target_chart(df_scope: pd.DataFrame):
+def render_target_chart(df_scope: pd.DataFrame, *, show_all: bool = False):
     weeks = _weekly_totals(df_scope)
     if weeks.empty:
         return
-    recent = weeks.tail(WEEKS_SHOWN).reset_index(drop=True)
+    recent = (weeks if show_all else weeks.tail(WEEKS_SHOWN)).reset_index(drop=True)
     st.markdown(f"#### Weekly Sales vs {money(WEEKLY_TARGET)} Target (last {len(recent)} weeks)")
     st.altair_chart(_peak_chart(recent), use_container_width=True)
 

@@ -8,8 +8,8 @@ import streamlit as st
 
 from .shared_core import money
 
-MONTHLY_GOAL = 240_000.0
-WEEKLY_TARGET = 60_000.0
+MONTHLY_GOAL = 260_000.0
+WEEKLY_TARGET = 65_000.0
 WEEKS_SHOWN = 12
 BAR_COLOR = "#24409c"
 

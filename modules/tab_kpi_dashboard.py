@@ -1647,7 +1647,7 @@ def _weekly_sales_trend_chart(df: pd.DataFrame, current_label: str, compare_labe
         name="weekly_point",
         fields=["WeekIndex", "Series"],
         on="click",
-        toggle=True,
+        toggle=False,
     )
     base = (
         alt.Chart(df)
@@ -1669,22 +1669,30 @@ def _weekly_sales_trend_chart(df: pd.DataFrame, current_label: str, compare_labe
 
 
 def _render_selected_week_detail(
-    selected_points: list[dict],
+    selected_points: dict | list[dict],
     trend: pd.DataFrame,
     df_current: pd.DataFrame,
     df_compare: pd.DataFrame,
     current_label: str,
     compare_label: str | None,
 ):
+    if isinstance(selected_points, dict):
+        selected_points = [selected_points] if selected_points else []
     if not selected_points:
         return
 
     selected = selected_points[0]
+    week_value = selected.get("WeekIndex")
+    series_value = selected.get("Series", "")
+    if isinstance(week_value, (list, tuple)):
+        week_value = week_value[0] if week_value else None
+    if isinstance(series_value, (list, tuple)):
+        series_value = series_value[0] if series_value else ""
     try:
-        week_index = int(selected.get("WeekIndex"))
+        week_index = int(week_value)
     except (TypeError, ValueError):
         return
-    series = str(selected.get("Series", ""))
+    series = str(series_value)
     selected_row = trend[(trend["WeekIndex"] == week_index) & (trend["Series"] == series)]
     if selected_row.empty:
         return
@@ -2004,9 +2012,9 @@ def render(ctx: dict):
                     trend_chart,
                     use_container_width=True,
                     on_select="rerun",
-                    selection_mode="points",
+                    selection_mode="weekly_point",
                 )
-                selected_points = chart_event.selection.get("weekly_point", [])
+                selected_points = chart_event.selection.get("weekly_point", {})
                 _render_selected_week_detail(
                     selected_points=selected_points,
                     trend=weekly_trend,

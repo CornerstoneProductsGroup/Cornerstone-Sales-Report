@@ -6,6 +6,7 @@ import html
 import re
 from dataclasses import dataclass
 from datetime import date, timedelta
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -52,6 +53,29 @@ def norm_retailer(x: str) -> str:
     k = s.lower()
     return _RETAILER_ALIASES.get(k, s)
 
+@lru_cache(maxsize=4)
+def _retailer_renames_for(mtime: float) -> Dict[str, str]:
+    df = pd.read_excel(DEFAULT_VENDOR_MAP, sheet_name=0, engine="openpyxl")
+    if "Retailer" not in df.columns or "Retailer Name Change" not in df.columns:
+        return {}
+    pairs = df[["Retailer", "Retailer Name Change"]].dropna()
+    renames = {}
+    for old, new in zip(pairs["Retailer"], pairs["Retailer Name Change"]):
+        old_n, new_n = norm_retailer(old), norm_retailer(new)
+        if old_n and new_n and old_n != new_n:
+            renames[old_n] = new_n
+    return renames
+
+def load_retailer_renames() -> Dict[str, str]:
+    """Old -> new retailer names from the vendor map's 'Retailer Name Change' column."""
+    if not DEFAULT_VENDOR_MAP.exists():
+        return {}
+    return _retailer_renames_for(DEFAULT_VENDOR_MAP.stat().st_mtime)
+
+def apply_retailer_renames(s: pd.Series) -> pd.Series:
+    renames = load_retailer_renames()
+    return s.replace(renames) if renames else s
+
 def norm_sku(x: str) -> str:
     if x is None:
         return ""
@@ -75,7 +99,7 @@ def load_store() -> pd.DataFrame:
         if c in df.columns:
             df[c] = pd.to_datetime(df[c], errors="coerce")
     if "Retailer" in df.columns:
-        df["Retailer"] = df["Retailer"].map(norm_retailer)
+        df["Retailer"] = apply_retailer_renames(df["Retailer"].map(norm_retailer))
     if "SKU" in df.columns:
         df["SKU"] = df["SKU"].map(norm_sku)
     return df
@@ -100,7 +124,7 @@ def load_state_totals() -> pd.DataFrame:
             df[c] = np.nan
     df = df[STATE_TOTAL_COLUMNS].copy()
     df["State"] = df["State"].astype(str).str.strip().str.upper()
-    df["Retailer"] = df["Retailer"].map(norm_retailer)
+    df["Retailer"] = apply_retailer_renames(df["Retailer"].map(norm_retailer))
     df["SKU"] = df["SKU"].map(norm_sku)
     df["Units"] = pd.to_numeric(df["Units"], errors="coerce").fillna(0.0)
     for c in ["StartDate", "EndDate"]:
@@ -222,7 +246,7 @@ def enrich_state_totals(df_raw: pd.DataFrame, vm: pd.DataFrame) -> pd.DataFrame:
         if c not in df.columns:
             df[c] = np.nan
     df["State"] = df["State"].astype(str).str.strip().str.upper()
-    df["Retailer"] = df["Retailer"].map(norm_retailer)
+    df["Retailer"] = apply_retailer_renames(df["Retailer"].map(norm_retailer))
     df["SKU"] = df["SKU"].map(norm_sku)
     df["Units"] = pd.to_numeric(df["Units"], errors="coerce").fillna(0.0)
     for c in ["StartDate", "EndDate"]:
@@ -475,10 +499,15 @@ def load_vendor_map() -> pd.DataFrame:
     for c in ["Retailer","SKU","Vendor"]:
         if c in df.columns:
             df[c] = df[c].astype(str).str.strip()
-    if "Retailer" in df.columns:
-        df["Retailer"] = df["Retailer"].map(norm_retailer)
     if "SKU" in df.columns:
         df["SKU"] = df["SKU"].map(norm_sku)
+    if "Retailer" in df.columns:
+        df["Retailer"] = df["Retailer"].map(norm_retailer)
+        renamed = df["Retailer"].isin(load_retailer_renames().keys())
+        df["Retailer"] = apply_retailer_renames(df["Retailer"])
+        # Explicit rows for the new retailer name win over renamed old-name rows.
+        df = df.assign(_renamed=renamed).sort_values("_renamed", kind="stable")
+        df = df[~(df["_renamed"] & df.duplicated(subset=["Retailer", "SKU"], keep="first"))].drop(columns=["_renamed"])
     if "Price" in df.columns:
         df["Price"] = pd.to_numeric(df["Price"], errors="coerce")
     if "Display SKU" not in df.columns:
@@ -493,7 +522,7 @@ def enrich_sales(df_raw: pd.DataFrame, vm: pd.DataFrame) -> pd.DataFrame:
     for c in ["Retailer","SKU","Units","UnitPrice","StartDate","EndDate","SourceFile"]:
         if c not in df.columns:
             df[c] = np.nan
-    df["Retailer"] = df["Retailer"].map(norm_retailer)
+    df["Retailer"] = apply_retailer_renames(df["Retailer"].map(norm_retailer))
     df["SKU"] = df["SKU"].map(norm_sku)
     df["Units"] = pd.to_numeric(df["Units"], errors="coerce").fillna(0.0)
 

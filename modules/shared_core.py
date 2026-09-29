@@ -114,6 +114,92 @@ def save_store(df: pd.DataFrame) -> None:
     keep = keep[["Retailer","SKU","Units","UnitPrice","StartDate","EndDate","SourceFile"]].copy()
     keep.to_csv(DEFAULT_STORE_CSV, index=False)
 
+
+def update_sku_price(
+    retailer: str,
+    sku: str,
+    price: float,
+    vendor: str = "Unknown",
+    *,
+    vendor_map_path: Path = DEFAULT_VENDOR_MAP,
+    store_path: Path = DEFAULT_STORE_CSV,
+) -> Tuple[int, int]:
+    """Persist a retailer/SKU price in the vendor map and matching sales backup rows."""
+    from openpyxl import load_workbook
+
+    target_retailer = norm_retailer(retailer)
+    target_sku = norm_sku(sku)
+    numeric_price = float(price)
+    if not target_retailer or not target_sku:
+        raise ValueError("Retailer and SKU are required.")
+    if not np.isfinite(numeric_price) or numeric_price <= 0:
+        raise ValueError("Price must be greater than $0.")
+    if not vendor_map_path.exists():
+        raise FileNotFoundError(f"Vendor map not found: {vendor_map_path}")
+
+    workbook = load_workbook(vendor_map_path)
+    sheet = workbook[workbook.sheetnames[0]]
+    headers = {
+        str(cell.value).strip(): column
+        for column, cell in enumerate(sheet[1], start=1)
+        if cell.value is not None
+    }
+    for required in ["Retailer", "SKU", "Price", "Vendor", "Display SKU"]:
+        if required not in headers:
+            column = sheet.max_column + 1
+            sheet.cell(row=1, column=column, value=required)
+            headers[required] = column
+
+    renames: Dict[str, str] = {}
+    if "Retailer Name Change" in headers:
+        for row in range(2, sheet.max_row + 1):
+            old_name = norm_retailer(sheet.cell(row=row, column=headers["Retailer"]).value)
+            new_name = norm_retailer(sheet.cell(row=row, column=headers["Retailer Name Change"]).value)
+            if old_name and new_name and old_name != new_name:
+                renames[old_name] = new_name
+    target_retailer = renames.get(target_retailer, target_retailer)
+
+    matched_rows = []
+    source_skus = set()
+    for row in range(2, sheet.max_row + 1):
+        row_retailer = norm_retailer(sheet.cell(row=row, column=headers["Retailer"]).value)
+        row_retailer = renames.get(row_retailer, row_retailer)
+        row_sku = norm_sku(sheet.cell(row=row, column=headers["SKU"]).value)
+        display_sku = norm_sku(sheet.cell(row=row, column=headers["Display SKU"]).value)
+        if row_retailer == target_retailer and target_sku in {row_sku, display_sku}:
+            sheet.cell(row=row, column=headers["Price"], value=numeric_price)
+            matched_rows.append(row)
+            source_skus.add(row_sku)
+
+    if not matched_rows:
+        new_row = sheet.max_row + 1
+        sheet.cell(row=new_row, column=headers["Retailer"], value=target_retailer)
+        sheet.cell(row=new_row, column=headers["SKU"], value=target_sku)
+        sheet.cell(row=new_row, column=headers["Price"], value=numeric_price)
+        sheet.cell(row=new_row, column=headers["Vendor"], value="" if vendor == "Unknown" else vendor)
+        source_skus.add(target_sku)
+
+    workbook.save(vendor_map_path)
+
+    updated_store_rows = 0
+    if store_path.exists():
+        store = pd.read_csv(store_path)
+        for column in ["Retailer", "SKU", "Units", "UnitPrice", "StartDate", "EndDate", "SourceFile"]:
+            if column not in store.columns:
+                store[column] = np.nan
+        retailer_keys = store["Retailer"].map(norm_retailer).replace(renames)
+        sku_keys = store["SKU"].map(norm_sku)
+        store_mask = retailer_keys.eq(target_retailer) & sku_keys.isin(source_skus)
+        updated_store_rows = int(store_mask.sum())
+        store.loc[store_mask, "UnitPrice"] = numeric_price
+        store[["Retailer", "SKU", "Units", "UnitPrice", "StartDate", "EndDate", "SourceFile"]].to_csv(
+            store_path,
+            index=False,
+        )
+
+    _retailer_renames_for.cache_clear()
+    return len(matched_rows), updated_store_rows
+
 def load_state_totals() -> pd.DataFrame:
     if DEFAULT_STATE_TOTALS_CSV.exists():
         df = pd.read_csv(DEFAULT_STATE_TOTALS_CSV)

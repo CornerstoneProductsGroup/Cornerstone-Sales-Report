@@ -1668,6 +1668,25 @@ def _weekly_sales_trend_chart(df: pd.DataFrame, current_label: str, compare_labe
     return (lines + points).properties(height=230)
 
 
+def _weekly_selection_key(selected_points: dict | list[dict]) -> tuple[str, int] | None:
+    if isinstance(selected_points, dict):
+        selected_points = [selected_points] if selected_points else []
+    if not selected_points:
+        return None
+
+    selected = selected_points[0]
+    week_value = selected.get("WeekIndex")
+    series_value = selected.get("Series", "")
+    if isinstance(week_value, (list, tuple)):
+        week_value = week_value[0] if week_value else None
+    if isinstance(series_value, (list, tuple)):
+        series_value = series_value[0] if series_value else ""
+    try:
+        return str(series_value), int(week_value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _render_selected_week_detail(
     selected_points: dict | list[dict],
     trend: pd.DataFrame,
@@ -1711,7 +1730,13 @@ def _render_selected_week_detail(
     sales = float(pd.to_numeric(week_df.get("Sales", 0.0), errors="coerce").fillna(0.0).sum())
     units = float(pd.to_numeric(week_df.get("Units", 0.0), errors="coerce").fillna(0.0).sum())
     asp = sales / units if units else 0.0
-    st.markdown(f"##### {series}: Week {week_index} ending {week_end:%m/%d/%Y}")
+    heading_col, close_col = st.columns([12, 1])
+    with heading_col:
+        st.markdown(f"##### {series}: Week {week_index} ending {week_end:%m/%d/%Y}")
+    with close_col:
+        if st.button("X", key="weekly_trend_close", help="Close selected week details"):
+            st.session_state["weekly_trend_dismissed"] = (series, week_index)
+            st.rerun()
     metric_cols = st.columns(3)
     metric_cols[0].metric("Sales", money(sales))
     metric_cols[1].metric("Units", f"{units:,.0f}")
@@ -2015,14 +2040,18 @@ def render(ctx: dict):
                     selection_mode="weekly_point",
                 )
                 selected_points = chart_event.selection.get("weekly_point", {})
-                _render_selected_week_detail(
-                    selected_points=selected_points,
-                    trend=weekly_trend,
-                    df_current=dfA,
-                    df_compare=dfB,
-                    current_label=current_label,
-                    compare_label=compare_label,
-                )
+                selection_key = _weekly_selection_key(selected_points)
+                dismissed_key = st.session_state.get("weekly_trend_dismissed")
+                if selection_key and selection_key != dismissed_key:
+                    st.session_state.pop("weekly_trend_dismissed", None)
+                    _render_selected_week_detail(
+                        selected_points=selected_points,
+                        trend=weekly_trend,
+                        df_current=dfA,
+                        df_compare=dfB,
+                        current_label=current_label,
+                        compare_label=compare_label,
+                    )
         _render_exec_kpi_table(
             kA=kA,
             kB=kB,

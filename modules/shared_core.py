@@ -88,12 +88,60 @@ def norm_sku(x: str) -> str:
 # -----------------------------
 BASE_COLUMNS = ["Retailer","Vendor","SKU","Units","Price","Sales","StartDate","EndDate","SourceFile"]
 STATE_TOTAL_COLUMNS = ["State","Retailer","SKU","Units","StartDate","EndDate","SourceFile"]
+SALES_STORE_COLUMNS = ["Retailer","SKU","Units","UnitPrice","StartDate","EndDate","SourceFile"]
+COMBINED_STORE_COLUMNS = ["RecordType", *SALES_STORE_COLUMNS, "State"]
+
+
+def split_store_records(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Read combined backups, while accepting older sales-only CSVs."""
+    if "RecordType" not in df.columns:
+        return df.reindex(columns=SALES_STORE_COLUMNS).copy(), pd.DataFrame(columns=STATE_TOTAL_COLUMNS)
+    record_types = df["RecordType"].fillna("").astype(str).str.strip()
+    invalid = ~record_types.isin(["Sales", "State Totals"])
+    if invalid.any():
+        raise ValueError("RecordType must be 'Sales' or 'State Totals' on every backup row.")
+    for record_type, columns in (("Sales", SALES_STORE_COLUMNS), ("State Totals", STATE_TOTAL_COLUMNS)):
+        if record_types.eq(record_type).any():
+            missing = set(columns) - set(df.columns)
+            if missing:
+                raise ValueError(f"{record_type} backup is missing columns: {', '.join(sorted(missing))}")
+    return (
+        df.loc[record_types.eq("Sales")].reindex(columns=SALES_STORE_COLUMNS).copy(),
+        df.loc[record_types.eq("State Totals")].reindex(columns=STATE_TOTAL_COLUMNS).copy(),
+    )
+
+
+def combine_store_records(sales: pd.DataFrame, states: pd.DataFrame) -> pd.DataFrame:
+    return pd.concat([
+        sales.reindex(columns=SALES_STORE_COLUMNS).assign(RecordType="Sales"),
+        states.reindex(columns=STATE_TOTAL_COLUMNS).assign(RecordType="State Totals"),
+    ], ignore_index=True).reindex(columns=COMBINED_STORE_COLUMNS)
+
+
+def read_store_records() -> Tuple[pd.DataFrame, pd.DataFrame]:
+    raw = pd.read_csv(DEFAULT_STORE_CSV) if DEFAULT_STORE_CSV.exists() else pd.DataFrame(columns=SALES_STORE_COLUMNS)
+    sales, states = split_store_records(raw)
+    # Migrate the old separate state file only until a combined store exists.
+    if "RecordType" not in raw.columns and DEFAULT_STATE_TOTALS_CSV.exists():
+        states = pd.read_csv(DEFAULT_STATE_TOTALS_CSV).reindex(columns=STATE_TOTAL_COLUMNS)
+    return sales, states
+
+
+def store_backup_bytes() -> bytes:
+    """Export both record types in the same format used for repository startup."""
+    return combine_store_records(*read_store_records()).to_csv(index=False).encode("utf-8")
+
+
+def restore_store_backup(df: pd.DataFrame) -> Tuple[int, int]:
+    sales, states = split_store_records(df)
+    if "RecordType" not in df.columns:
+        # A legacy sales-only restore must not erase separately uploaded state data.
+        _, states = read_store_records()
+    combine_store_records(sales, states).to_csv(DEFAULT_STORE_CSV, index=False)
+    return len(sales), len(states)
 
 def load_store() -> pd.DataFrame:
-    if DEFAULT_STORE_CSV.exists():
-        df = pd.read_csv(DEFAULT_STORE_CSV)
-    else:
-        df = pd.DataFrame(columns=["Retailer","SKU","Units","UnitPrice","StartDate","EndDate","SourceFile"])
+    df, _ = read_store_records()
     # If it's legacy shape (no Vendor/Price/Sales), keep and enrich later.
     for c in ["StartDate","EndDate"]:
         if c in df.columns:
@@ -105,14 +153,8 @@ def load_store() -> pd.DataFrame:
     return df
 
 def save_store(df: pd.DataFrame) -> None:
-    # Persist in the legacy shape to stay compatible with the existing app if needed.
-    keep = df.copy()
-    # Ensure these exist
-    for c in ["Retailer","SKU","Units","UnitPrice","StartDate","EndDate","SourceFile"]:
-        if c not in keep.columns:
-            keep[c] = np.nan
-    keep = keep[["Retailer","SKU","Units","UnitPrice","StartDate","EndDate","SourceFile"]].copy()
-    keep.to_csv(DEFAULT_STORE_CSV, index=False)
+    _, states = read_store_records()
+    combine_store_records(df, states).to_csv(DEFAULT_STORE_CSV, index=False)
 
 
 def update_sku_price(
@@ -196,21 +238,18 @@ def update_sku_price(
         retailer_keys = store["Retailer"].map(norm_retailer).replace(renames)
         sku_keys = store["SKU"].map(norm_sku)
         store_mask = retailer_keys.eq(target_retailer) & sku_keys.isin(source_skus)
+        if "RecordType" in store.columns:
+            split_store_records(store)
+            store_mask &= store["RecordType"].eq("Sales")
         updated_store_rows = int(store_mask.sum())
         store.loc[store_mask, "UnitPrice"] = numeric_price
-        store[["Retailer", "SKU", "Units", "UnitPrice", "StartDate", "EndDate", "SourceFile"]].to_csv(
-            store_path,
-            index=False,
-        )
+        store.to_csv(store_path, index=False)
 
     _retailer_renames_for.cache_clear()
     return len(matched_rows), updated_store_rows
 
 def load_state_totals() -> pd.DataFrame:
-    if DEFAULT_STATE_TOTALS_CSV.exists():
-        df = pd.read_csv(DEFAULT_STATE_TOTALS_CSV)
-    else:
-        df = pd.DataFrame(columns=STATE_TOTAL_COLUMNS)
+    _, df = read_store_records()
     for c in STATE_TOTAL_COLUMNS:
         if c not in df.columns:
             df[c] = np.nan
@@ -224,12 +263,9 @@ def load_state_totals() -> pd.DataFrame:
     return df
 
 def save_state_totals(df: pd.DataFrame) -> None:
-    keep = df.copy() if df is not None else pd.DataFrame(columns=STATE_TOTAL_COLUMNS)
-    for c in STATE_TOTAL_COLUMNS:
-        if c not in keep.columns:
-            keep[c] = np.nan
-    keep = keep[STATE_TOTAL_COLUMNS].copy()
-    keep.to_csv(DEFAULT_STATE_TOTALS_CSV, index=False)
+    sales, _ = read_store_records()
+    states = df if df is not None else pd.DataFrame(columns=STATE_TOTAL_COLUMNS)
+    combine_store_records(sales, states).to_csv(DEFAULT_STORE_CSV, index=False)
 
 def replace_state_totals_for_uploaded_weeks(existing: pd.DataFrame, new_rows: pd.DataFrame) -> pd.DataFrame:
     if existing is None or existing.empty:
@@ -1428,20 +1464,15 @@ def render_df(df: pd.DataFrame, height: int = 320):
 
 def render_data_management_center(vm: pd.DataFrame, store: pd.DataFrame):
     st.subheader("Data Management Center")
-    st.caption("Manage CSV backup/restore, ingest new workbooks, and review coverage by year.")
+    st.caption(
+        "Sales and State Totals share one sales_store.csv backup. After uploading data, download "
+        "the backup and replace data/sales_store.csv in the repository to retain both after reboots. "
+        "Uploads do not update GitHub automatically."
+    )
     base_data_dir = DATA_DIR
     base_data_dir.mkdir(parents=True, exist_ok=True)
 
-    # CSV backup / restore
-    backup_df = load_store().copy()
-    csv_bytes = backup_df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "Download Backup CSV",
-        data=csv_bytes,
-        file_name="cornerstone_sales_backup.csv",
-        mime="text/csv",
-        use_container_width=True,
-    )
+    backup_download = st.empty()
 
     c1, c2 = st.columns(2)
     with c1:
@@ -1449,13 +1480,10 @@ def render_data_management_center(vm: pd.DataFrame, store: pd.DataFrame):
         if restore is not None and st.button("Restore Backup CSV", key="restore_backup_csv_btn", use_container_width=True):
             try:
                 restored = pd.read_csv(restore)
-                required = ["Retailer","SKU","Units","UnitPrice","StartDate","EndDate","SourceFile"]
-                for c in required:
-                    if c not in restored.columns:
-                        restored[c] = np.nan
-                restored = restored[required].copy()
-                save_store(restored)
-                st.success(f"Backup restored from CSV with {len(restored):,} rows.")
+                sales_count, state_count = restore_store_backup(restored)
+                st.success(f"Backup restored: {sales_count:,} sales row(s) and {state_count:,} state total row(s).")
+                if "RecordType" not in restored.columns:
+                    st.info("This is an older sales-only backup. Existing State Totals were kept.")
             except Exception as e:
                 st.error(f"Restore failed: {e}")
     with c2:
@@ -1519,7 +1547,7 @@ def render_data_management_center(vm: pd.DataFrame, store: pd.DataFrame):
             st.error(f"Unit correction failed: {e}")
 
     st.markdown("### State Totals Upload")
-    st.caption("Use this for the new workbook's State Totals tab only. This writes to a separate state totals store and does not change sales data.")
+    st.caption("Upload the workbook's State Totals tab only. State rows are saved in sales_store.csv alongside sales, without changing sales records. Download a fresh backup after uploading.")
     state_year = st.number_input("Year hint for state totals workbook(s)", min_value=2010, max_value=2100, value=date.today().year, step=1, key="dmc_state_totals_year")
     state_uploads = st.file_uploader("Upload state totals workbook(s)", type=["xlsx"], accept_multiple_files=True, key="dmc_state_totals_uploads")
     if state_uploads and st.button("Ingest State Totals Only", key="dmc_state_totals_ingest_btn", use_container_width=True):
@@ -1626,6 +1654,14 @@ def render_data_management_center(vm: pd.DataFrame, store: pd.DataFrame):
                     st.success(f"Added {len(new_rows)} missed sale row(s) to the store.")
                     st.rerun()
 
+    # Build the download after any uploads or corrections made in this rerun.
+    backup_download.download_button(
+        "Download Backup CSV",
+        data=store_backup_bytes(),
+        file_name="sales_store.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
     df_all = enrich_sales(load_store(), load_vendor_map())
     if df_all.empty:
         st.info("No sales data loaded yet.")

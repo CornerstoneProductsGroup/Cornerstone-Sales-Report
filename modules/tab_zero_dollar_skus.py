@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from .shared_core import DEFAULT_VENDOR_MAP, load_store, update_sku_price
+from .shared_core import DEFAULT_VENDOR_MAP, store_backup_bytes, update_sku_price
 
 
 def build_zero_sales_detail(df: pd.DataFrame) -> pd.DataFrame:
@@ -144,11 +144,11 @@ def render(ctx: dict):
             except Exception as exc:
                 st.error(f"Price could not be saved: {exc}")
 
-    backup_bytes = load_store().to_csv(index=False).encode("utf-8")
+    backup_bytes = store_backup_bytes()
     st.download_button(
-        "Download Updated Sales Backup",
+        "Download Updated Sales and State Totals Backup",
         data=backup_bytes,
-        file_name="cornerstone_sales_backup.csv",
+        file_name="sales_store.csv",
         mime="text/csv",
         use_container_width=True,
     )

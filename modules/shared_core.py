@@ -604,6 +604,11 @@ def load_vendor_map() -> pd.DataFrame:
     for c in ["Retailer","SKU","Vendor"]:
         if c in df.columns:
             df[c] = df[c].astype(str).str.strip()
+    if "Display SKU" not in df.columns:
+        df["Display SKU"] = ""
+    display_sku = df["Display SKU"].fillna("").astype(str).str.strip()
+    # Capture column B's spelling before normalizing the source matching key.
+    df["Display SKU"] = display_sku.where(display_sku.ne(""), df["SKU"])
     if "SKU" in df.columns:
         df["SKU"] = df["SKU"].map(norm_sku)
     if "Retailer" in df.columns:
@@ -615,9 +620,6 @@ def load_vendor_map() -> pd.DataFrame:
         df = df[~(df["_renamed"] & df.duplicated(subset=["Retailer", "SKU"], keep="first"))].drop(columns=["_renamed"])
     if "Price" in df.columns:
         df["Price"] = pd.to_numeric(df["Price"], errors="coerce")
-    if "Display SKU" not in df.columns:
-        df["Display SKU"] = ""
-    df["Display SKU"] = df["Display SKU"].fillna("").astype(str).str.strip()
     return df[["Retailer","SKU","Price","Vendor","Display SKU"]].copy()
 
 def apply_display_skus(df: pd.DataFrame) -> pd.DataFrame:

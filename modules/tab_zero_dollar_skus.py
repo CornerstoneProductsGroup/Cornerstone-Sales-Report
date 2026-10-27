@@ -114,8 +114,9 @@ def render(ctx: dict):
                 "Display SKU",
                 value=selected_sku,
                 help=(
-                    "Capitalization and spaces are preserved. Source SKUs with the same display "
-                    "name are grouped together in reports. The original source SKU stays unchanged "
+                    "Column E (Display SKU) overrides column B (SKU); when E is blank, column B's "
+                    "capitalization and spaces are used. Matching labels are grouped together in "
+                    "reports. The original source SKU stays unchanged "
                     "so future uploads continue to match."
                 ),
             )

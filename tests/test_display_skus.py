@@ -67,6 +67,53 @@ class DisplaySKUTests(unittest.TestCase):
             self.assertEqual(result["Units"].sum(), 6)
             self.assertEqual(result["Sales"].sum(), 105.0)
 
+    def test_column_e_overrides_b_and_blank_e_preserves_column_b(self):
+        mapping = pd.DataFrame({
+            "Retailer": ["Depot", "Lowes", "Tractor Supply", "Walmart", "Depot"],
+            "SKU": ["Niban4lbShaker", "NIBAN4LBSHAKER", "NB4", "NB4", "Deco Mia-953"],
+            "Price": [22.0, 22.0, 23.68, 35.0, 10.0],
+            "Vendor": ["Nisus"] * 4 + ["Vendor"],
+            "Display SKU": [None, "Niban4lbShaker", "Niban4lbShaker", "Niban4lbShaker", "  "],
+        })
+        raw = self.raw.iloc[:5].copy()
+        raw["Retailer"] = mapping["Retailer"]
+        raw["SKU"] = ["NIBAN4LBSHAKER", "NIBAN4LBSHAKER", "NB4", "NB4", "DECOMIA-953"]
+        raw["Units"] = [833, 4, 547, 0, 2]
+        raw["UnitPrice"] = None
+        original = raw.copy(deep=True)
+        with tempfile.TemporaryDirectory() as directory:
+            map_path = Path(directory) / "vendor_map.xlsx"
+            mapping.to_excel(map_path, index=False)
+            workbook_before = map_path.read_bytes()
+            with patch.object(core, "DEFAULT_VENDOR_MAP", map_path):
+                loaded = core.load_vendor_map()
+            self.assertEqual(loaded["SKU"].tolist(), raw["SKU"].tolist())
+            for result in (
+                core.enrich_sales(raw, loaded),
+                core.enrich_state_totals(raw.assign(State="TX"), loaded),
+            ):
+                self.assertEqual(result["SKU"].tolist(), ["Niban4lbShaker"] * 4 + ["Deco Mia-953"])
+                self.assertEqual(sorted(result["SKU"].unique()), ["Deco Mia-953", "Niban4lbShaker"])
+                grouped = result.groupby("SKU")["Units"].sum()
+                self.assertEqual(grouped["Niban4lbShaker"], 1384)
+                self.assertEqual(len(result), len(raw))
+            sales = core.enrich_sales(raw, loaded)
+            self.assertAlmostEqual(sales["Sales"].sum(), 31386.96)
+            pd.testing.assert_frame_equal(raw, original)
+            self.assertEqual(map_path.read_bytes(), workbook_before)
+
+    def test_legacy_map_without_column_e_preserves_column_b(self):
+        mapping = self.mapping.drop(columns="Display SKU").copy()
+        mapping.loc[0, "SKU"] = "Deco Mia-53"
+        with tempfile.TemporaryDirectory() as directory:
+            map_path = Path(directory) / "vendor_map.xlsx"
+            mapping.to_excel(map_path, index=False)
+            with patch.object(core, "DEFAULT_VENDOR_MAP", map_path):
+                loaded = core.load_vendor_map()
+            result = core.enrich_sales(self.raw, loaded)
+            self.assertEqual(result.loc[0, "SKU"], "Deco Mia-53")
+            self.assertEqual(loaded.loc[0, "SKU"], "DECOMIA-53")
+
     def test_state_totals_use_same_labels_including_sku_only_fallback(self):
         raw = self.raw.assign(State="TX")
         raw.loc[2, "Retailer"] = ""

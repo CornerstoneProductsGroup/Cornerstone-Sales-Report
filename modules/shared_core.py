@@ -130,7 +130,7 @@ def update_sku_price(
 
     target_retailer = norm_retailer(retailer)
     target_sku = norm_sku(sku)
-    target_display_sku = norm_sku(display_sku)
+    target_display_sku = "" if display_sku is None else str(display_sku).strip()
     numeric_price = float(price)
     if not target_retailer or not target_sku:
         raise ValueError("Retailer and SKU are required.")
@@ -167,8 +167,8 @@ def update_sku_price(
         row_retailer = norm_retailer(sheet.cell(row=row, column=headers["Retailer"]).value)
         row_retailer = renames.get(row_retailer, row_retailer)
         row_sku = norm_sku(sheet.cell(row=row, column=headers["SKU"]).value)
-        display_sku = norm_sku(sheet.cell(row=row, column=headers["Display SKU"]).value)
-        if row_retailer == target_retailer and target_sku in {row_sku, display_sku}:
+        row_display_sku = norm_sku(sheet.cell(row=row, column=headers["Display SKU"]).value)
+        if row_retailer == target_retailer and target_sku in {row_sku, row_display_sku}:
             sheet.cell(row=row, column=headers["Price"], value=numeric_price)
             if target_display_sku:
                 sheet.cell(row=row, column=headers["Display SKU"], value=target_display_sku)
@@ -346,12 +346,20 @@ def enrich_state_totals(df_raw: pd.DataFrame, vm: pd.DataFrame) -> pd.DataFrame:
     df["WeekEnd"] = df["EndDate"].fillna(df["StartDate"])
 
     if vm is not None and not vm.empty and {"Retailer", "SKU", "Vendor"}.issubset(vm.columns):
-        exact = vm[["Retailer", "SKU", "Vendor"]].drop_duplicates(subset=["Retailer", "SKU"])
-        sku_only = vm[["SKU", "Vendor"]].dropna().drop_duplicates(subset=["SKU"]).rename(columns={"Vendor": "VendorBySKU"})
+        mapping = vm.reindex(columns=["Retailer", "SKU", "Vendor", "Display SKU"])
+        exact = mapping.drop_duplicates(subset=["Retailer", "SKU"])
+        sku_only = (
+            mapping[["SKU", "Vendor", "Display SKU"]]
+            .dropna(subset=["SKU", "Vendor"])
+            .drop_duplicates(subset=["SKU"])
+            .rename(columns={"Vendor": "VendorBySKU", "Display SKU": "DisplaySKUBySKU"})
+        )
         df = df.merge(exact, on=["Retailer", "SKU"], how="left")
         df = df.merge(sku_only, on="SKU", how="left")
         df["Vendor"] = df["Vendor"].fillna(df["VendorBySKU"])
-        df = df.drop(columns=["VendorBySKU"])
+        df["Display SKU"] = df["Display SKU"].fillna(df["DisplaySKUBySKU"])
+        df = apply_display_skus(df)
+        df = df.drop(columns=["VendorBySKU", "DisplaySKUBySKU"])
     else:
         df["Vendor"] = np.nan
     df["Vendor"] = df["Vendor"].fillna("Unknown").astype(str).str.strip()
@@ -612,6 +620,14 @@ def load_vendor_map() -> pd.DataFrame:
     df["Display SKU"] = df["Display SKU"].fillna("").astype(str).str.strip()
     return df[["Retailer","SKU","Price","Vendor","Display SKU"]].copy()
 
+def apply_display_skus(df: pd.DataFrame) -> pd.DataFrame:
+    """Use display labels verbatim after source-key joins, never for stored source SKUs."""
+    df = df.copy()
+    display_sku = df["Display SKU"].fillna("").astype(str).str.strip()
+    df["SKU"] = display_sku.where(display_sku.ne(""), df["SKU"])
+    return df.drop(columns=["Display SKU"])
+
+
 def enrich_sales(df_raw: pd.DataFrame, vm: pd.DataFrame) -> pd.DataFrame:
     """Return a fully-enriched fact table with Vendor, Price, Sales, and a weekly key."""
     df = df_raw.copy()
@@ -624,15 +640,14 @@ def enrich_sales(df_raw: pd.DataFrame, vm: pd.DataFrame) -> pd.DataFrame:
     df["Units"] = pd.to_numeric(df["Units"], errors="coerce").fillna(0.0)
 
     # Merge vendor map (Retailer+SKU)
-    m = vm.copy()
+    # Spaced and unspaced aliases can normalize to identical map rows.
+    m = vm.drop_duplicates().copy()
     df = df.merge(m, on=["Retailer","SKU"], how="left", suffixes=("","_map"))
     # Use UnitPrice if present, else map Price
     df["UnitPrice"] = pd.to_numeric(df.get("UnitPrice"), errors="coerce")
     df["Price"] = np.where(df["UnitPrice"].notna(), df["UnitPrice"], df["Price"])
     df["Sales"] = df["Units"] * df["Price"].fillna(0.0)
-    display_sku = df["Display SKU"].fillna("").astype(str).str.strip()
-    df["SKU"] = display_sku.where(display_sku.ne(""), df["SKU"]).map(norm_sku)
-    df = df.drop(columns=["Display SKU"])
+    df = apply_display_skus(df)
 
     df["Vendor"] = df["Vendor"].fillna("Unknown").astype(str).str.strip()
     df["StartDate"] = pd.to_datetime(df["StartDate"], errors="coerce")

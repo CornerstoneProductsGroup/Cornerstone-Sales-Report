@@ -113,7 +113,11 @@ def render(ctx: dict):
             new_display_sku = st.text_input(
                 "Display SKU",
                 value=selected_sku,
-                help="The original source SKU stays unchanged so future uploads continue to match.",
+                help=(
+                    "Capitalization and spaces are preserved. Source SKUs with the same display "
+                    "name are grouped together in reports. The original source SKU stays unchanged "
+                    "so future uploads continue to match."
+                ),
             )
             st.caption(
                 f"Updates {affected_records:,} existing record(s) totaling {affected_units:,.0f} units "

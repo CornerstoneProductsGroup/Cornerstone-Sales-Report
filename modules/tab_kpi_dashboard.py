@@ -1596,13 +1596,22 @@ def _render_exec_kpi_table(
             )
         rows += f"<tr>{row}</tr>"
 
-    sku_bits = []
+    sku_cards = ""
     if compare_label:
-        sku_bits.append(f"New SKUs: {new_sku_tile['value']} ({new_sku_tile['delta']})")
+        churn_tiles = [("New SKUs", new_sku_tile)]
         if lost_sku_tile:
-            sku_bits.append(f"Lost SKUs: {lost_sku_tile['value']} ({lost_sku_tile['delta']})")
+            churn_tiles.append(("Lost SKUs", lost_sku_tile))
+        for title, tile in churn_tiles:
+            sku_cards += (
+                "<div class='sales-exec-kpi-tile'>"
+                f"<div class='sales-exec-kpi-title'>{esc(title)}</div>"
+                f"<div class='sales-exec-kpi-value'>{esc(str(tile['value']))}</div>"
+                f"<div class='sales-exec-kpi-meta-line'>{esc(str(tile['delta']))}</div>"
+                "</div>"
+            )
     sku_html = (
-        f"<div class='sales-exec-context'>{esc('  |  '.join(sku_bits))}</div>" if sku_bits else ""
+        f"<div class='sales-exec-kpi-ribbon sales-exec-sku-summary'>{sku_cards}</div>"
+        if sku_cards else ""
     )
 
     st.markdown(
@@ -2130,5 +2139,4 @@ def render(ctx: dict):
                 st.info("No vendor share change data available for the selected timeframe.")
             else:
                 st.altair_chart(vendor_share_change_chart, use_container_width=True)
-
 

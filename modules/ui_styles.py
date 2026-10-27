@@ -57,6 +57,9 @@ def apply_global_styles():
     .sales-exec-kpi-delta{font-size:14px;font-weight:800;line-height:1.1;}
     .sales-exec-kpi-meta-line{font-size:12px;line-height:1.25;color:#4b5563;margin-top:4px;}
     .sales-exec-context{font-size:12px;color:#6b7280;margin:0 0 10px 0;}
+    .sales-exec-kpi-ribbon.sales-exec-sku-summary{grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));border-radius:8px;overflow:hidden;margin:12px 0;}
+    .sales-exec-sku-summary .sales-exec-kpi-value{margin-top:8px;}
+    .sales-exec-sku-summary .sales-exec-kpi-meta-line{font-size:14px;margin-top:8px;}
     .sales-exec-kpi-table{width:100%;border-collapse:collapse;background:#ffffff;border:1px solid rgba(148,163,184,0.35);box-shadow:0 1px 3px rgba(15,23,42,0.08);margin:0 0 8px 0;}
     .sales-exec-kpi-table th{font-size:13px;font-weight:700;color:#5b6472;text-align:right;padding:10px 16px;border-bottom:1px solid rgba(203,213,225,0.9);}
     .sales-exec-kpi-table td{font-size:15px;color:#374151;text-align:right;padding:12px 16px;border-bottom:1px solid rgba(226,232,240,0.9);white-space:nowrap;}

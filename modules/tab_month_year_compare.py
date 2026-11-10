@@ -1066,6 +1066,86 @@ def render_visual_executive_dashboard(
     )
 
 
+def _build_comparison_detail(dfA: pd.DataFrame, dfB: pd.DataFrame, group_col: str) -> pd.DataFrame:
+    a = dfA.groupby(group_col, as_index=False).agg(Sales_A=("Sales", "sum"))
+    b = dfB.groupby(group_col, as_index=False).agg(Sales_B=("Sales", "sum"))
+    comp = a.merge(b, on=group_col, how="outer").fillna(0.0)
+    comp["Difference"] = comp["Sales_A"] - comp["Sales_B"]
+    comp["% Change"] = comp["Difference"] / comp["Sales_B"].replace(0, np.nan)
+    return comp.sort_values(["Sales_A", group_col], ascending=[False, True]).reset_index(drop=True)
+
+
+def _render_comparison_detail(dfA: pd.DataFrame, dfB: pd.DataFrame, a_lbl: str, b_lbl: str):
+    def display_table(comp: pd.DataFrame, group_col: str, height: int):
+        sales_a = comp["Sales_A"].sum()
+        sales_b = comp["Sales_B"].sum()
+        total = pd.DataFrame([{
+            group_col: "Total",
+            "Sales_A": sales_a,
+            "Sales_B": sales_b,
+            "Difference": sales_a - sales_b,
+            "% Change": (sales_a - sales_b) / sales_b if sales_b != 0 else np.nan,
+        }])
+        show = rename_ab_columns(pd.concat([comp, total], ignore_index=True), a_lbl, b_lbl)
+        sales_a_col = f"Sales ({a_lbl})"
+        sales_b_col = f"Sales ({b_lbl})" if b_lbl else "Sales (Comparison)"
+        for col in [sales_a_col, sales_b_col, "Difference"]:
+            show[col] = show[col].map(money)
+        show["% Change"] = show["% Change"].map(pct_fmt)
+        st.dataframe(
+            show[[group_col, sales_a_col, sales_b_col, "Difference", "% Change"]],
+            use_container_width=True,
+            hide_index=True,
+            height=height,
+        )
+
+    st.subheader("Comparison Detail")
+    pivot_dim = st.selectbox("Compare rows by", options=["Retailer", "Vendor"], index=0, key="mod_compare_dim")
+    comp = _build_comparison_detail(dfA, dfB, pivot_dim)
+    display_table(comp, pivot_dim, height=900)
+
+    second_dim = "Vendor" if pivot_dim == "Retailer" else "Retailer"
+    st.caption(
+        f"Drill down: select a {pivot_dim.lower()} to compare its {second_dim.lower()}s, "
+        f"then select a {second_dim.lower()} to compare SKUs across the same periods."
+    )
+    if comp.empty:
+        st.info("No data available for the selected periods.")
+        return
+
+    pick1 = st.selectbox(
+        f"Select {pivot_dim} for Level 2",
+        options=comp[pivot_dim].tolist(),
+        index=None,
+        placeholder=f"Choose a {pivot_dim.lower()}",
+        key=f"mod_compare_pick1_{pivot_dim}",
+    )
+    if pick1 is None:
+        return
+
+    dfA_l2 = dfA[dfA[pivot_dim] == pick1]
+    dfB_l2 = dfB[dfB[pivot_dim] == pick1]
+    lvl2 = _build_comparison_detail(dfA_l2, dfB_l2, second_dim)
+    st.markdown(f"**Level 2 — {second_dim}s inside {pick1}**")
+    display_table(lvl2, second_dim, height=500)
+
+    pick2 = st.selectbox(
+        f"Select {second_dim} for Level 3",
+        options=lvl2[second_dim].tolist(),
+        index=None,
+        placeholder=f"Choose a {second_dim.lower()}",
+        key=f"mod_compare_pick2_{pivot_dim}_{pick1}",
+    )
+    if pick2 is None:
+        return
+
+    dfA_l3 = dfA_l2[dfA_l2[second_dim] == pick2]
+    dfB_l3 = dfB_l2[dfB_l2[second_dim] == pick2]
+    lvl3 = _build_comparison_detail(dfA_l3, dfB_l3, "SKU")
+    st.markdown(f"**Level 3 — SKUs inside {pick1} → {pick2}**")
+    display_table(lvl3, "SKU", height=520)
+
+
 def render_standard_view(
     dfA: pd.DataFrame,
     dfB: pd.DataFrame,
@@ -1076,9 +1156,6 @@ def render_standard_view(
     compare_mode: str,
     min_sales: float,
 ):
-    def render_shaded_total_table(df: pd.DataFrame, height: int = 760):
-        st.dataframe(df, use_container_width=True, hide_index=True, height=height)
-
     def pct_change(cur, prev):
         if prev == 0:
             return np.nan if cur == 0 else np.inf
@@ -1291,36 +1368,7 @@ def render_standard_view(
             render_df(show_new, height=360)
 
     st.divider()
-    st.subheader("Comparison Detail")
-
-    pivot_dim = st.selectbox("Compare rows by", options=["Retailer", "Vendor"], index=0, key="mod_compare_dim")
-    comp_a = dfA.groupby(pivot_dim, as_index=False).agg(Sales_A=("Sales", "sum"))
-    comp_b = dfB.groupby(pivot_dim, as_index=False).agg(Sales_B=("Sales", "sum"))
-    comp = comp_a.merge(comp_b, on=pivot_dim, how="outer").fillna(0.0)
-    comp["Difference"] = comp["Sales_A"] - comp["Sales_B"]
-    comp["% Change"] = np.where(comp["Sales_B"] != 0, comp["Difference"] / comp["Sales_B"], np.nan)
-    comp = comp.sort_values("Sales_A", ascending=False)
-
-    total = pd.DataFrame(
-        [
-            {
-                pivot_dim: "Total",
-                "Sales_A": comp["Sales_A"].sum(),
-                "Sales_B": comp["Sales_B"].sum(),
-                "Difference": comp["Difference"].sum(),
-                "% Change": np.nan if comp["Sales_B"].sum() == 0 else comp["Difference"].sum() / comp["Sales_B"].sum(),
-            }
-        ]
-    )
-    comp_show = pd.concat([comp, total], ignore_index=True)
-    show = rename_ab_columns(comp_show.copy(), a_lbl, b_lbl)
-    sales_a_col = f"Sales ({a_lbl})"
-    sales_b_col = f"Sales ({b_lbl})" if b_lbl else "Sales (Comparison)"
-    show[sales_a_col] = show[sales_a_col].map(money)
-    show[sales_b_col] = show[sales_b_col].map(money)
-    show["Difference"] = show["Difference"].map(money)
-    show["% Change"] = show["% Change"].map(pct_fmt)
-    render_shaded_total_table(show[[pivot_dim, sales_a_col, sales_b_col, "Difference", "% Change"]], height=900)
+    _render_comparison_detail(dfA, dfB, a_lbl, b_lbl)
 
     st.divider()
     st.subheader("Movers")

@@ -113,6 +113,7 @@ def render_goal_strip(df_scope: pd.DataFrame):
 
 
 def render_recent_month_goals(df_scope: pd.DataFrame):
+    """Show recent monthly goals and year-to-date progress for the latest data year."""
     weeks = _weekly_totals(df_scope)
     st.markdown("#### Last 7 Months vs Goal")
     if weeks.empty:
@@ -128,6 +129,16 @@ def render_recent_month_goals(df_scope: pd.DataFrame):
             min(pct, 1.0),
             text=f"{money(sales)} / {money(MONTHLY_GOAL)} ({pct * 100:,.0f}%)".replace("$", "\\$"),
         )
+
+    current_year = weeks["WeekEnd"].iloc[-1].year
+    year_sales = float(weeks.loc[weeks["WeekEnd"].dt.year == current_year, "Sales"].sum())
+    annual_goal = MONTHLY_GOAL * 12
+    year_pct = year_sales / annual_goal
+    st.markdown(f"**{current_year} Year to Date**")
+    st.progress(
+        min(max(year_pct, 0.0), 1.0),
+        text=f"{money(year_sales)} / {money(annual_goal)} ({year_pct * 100:,.0f}%)".replace("$", "\\$"),
+    )
 
 
 def render_target_chart(df_scope: pd.DataFrame, *, show_all: bool = False):

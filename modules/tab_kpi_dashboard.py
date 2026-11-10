@@ -2043,10 +2043,10 @@ def render(ctx: dict):
 
     st.markdown("""
         <style>
-        [data-testid="stColumn"]:has(.st-key-standard_top_movers) > [data-testid="stVerticalBlock"] {
+        [data-testid="stColumn"]:has(.st-key-standard_top_movers, .st-key-standard_weekly_target) > [data-testid="stVerticalBlock"] {
             height: 100%;
         }
-        [data-testid="stColumn"]:has(.st-key-standard_top_movers) > [data-testid="stVerticalBlock"] > :last-child {
+        [data-testid="stColumn"]:has(.st-key-standard_top_movers, .st-key-standard_weekly_target) > [data-testid="stVerticalBlock"] > :last-child {
             margin-top: auto;
         }
         </style>
@@ -2087,7 +2087,7 @@ def render(ctx: dict):
             new_sku_tile=tiles["current"][3],
             lost_sku_tile=tiles["compare"][3] if compare_label else None,
         )
-        with st.container(border=True):
+        with st.container(border=True, key="standard_weekly_target"):
             tab_weekly_goals.render_target_chart(dfA, show_all=True)
 
     with movers_col:
@@ -2139,4 +2139,3 @@ def render(ctx: dict):
                 st.info("No vendor share change data available for the selected timeframe.")
             else:
                 st.altair_chart(vendor_share_change_chart, use_container_width=True)
-

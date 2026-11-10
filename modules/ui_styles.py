@@ -66,6 +66,9 @@ def apply_global_styles():
     .sales-exec-kpi-table th:first-child,.sales-exec-kpi-table td:first-child{text-align:left;}
     .sales-exec-kpi-table tr:last-child td{border-bottom:none;}
 
+    .st-key-annual_goal_progress{border-top:1px solid rgba(148,163,184,0.35);padding-top:16px;}
+    .st-key-annual_goal_progress [data-testid="stProgress"] p{font-size:20px;font-weight:700;line-height:1.4;}
+
     .sales-movers-table{display:flex;flex-direction:column;gap:0;height:540px;}
     .sales-movers-row{display:grid;grid-template-columns:minmax(0,1.1fr) auto auto minmax(0,1fr);gap:10px;align-items:center;padding:6px 6px;border-top:1px solid rgba(226,232,240,0.9);flex:1;}
     .sales-movers-row:first-child{border-top:none;}

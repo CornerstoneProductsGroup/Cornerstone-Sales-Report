@@ -13,6 +13,7 @@ class RecentMonthGoalsTests(unittest.TestCase):
             patch("modules.tab_weekly_goals.st.markdown") as markdown,
             patch("modules.tab_weekly_goals.st.progress") as progress,
             patch("modules.tab_weekly_goals.st.info") as info,
+            patch("modules.tab_weekly_goals.st.container"),
         ):
             render_recent_month_goals(frame)
         return markdown, progress, info
@@ -26,7 +27,7 @@ class RecentMonthGoalsTests(unittest.TestCase):
         ])
 
         self.assertEqual(progress.call_count, 8)
-        self.assertEqual(markdown.call_args.args[0], "**2026 Year to Date**")
+        self.assertEqual(markdown.call_args.args[0], "### 2026 Year to Date")
         self.assertEqual(progress.call_args.args, (0.5,))
         self.assertEqual(
             progress.call_args.kwargs["text"],
@@ -54,7 +55,7 @@ class RecentMonthGoalsTests(unittest.TestCase):
             ("2026-12-25", 3_120_000),
             ("2027-01-01", 31_200),
         ])
-        self.assertEqual(markdown.call_args.args[0], "**2027 Year to Date**")
+        self.assertEqual(markdown.call_args.args[0], "### 2027 Year to Date")
         self.assertAlmostEqual(progress.call_args.args[0], 0.01)
         self.assertEqual(
             progress.call_args.kwargs["text"],

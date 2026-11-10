@@ -134,11 +134,12 @@ def render_recent_month_goals(df_scope: pd.DataFrame):
     year_sales = float(weeks.loc[weeks["WeekEnd"].dt.year == current_year, "Sales"].sum())
     annual_goal = MONTHLY_GOAL * 12
     year_pct = year_sales / annual_goal
-    st.markdown(f"**{current_year} Year to Date**")
-    st.progress(
-        min(max(year_pct, 0.0), 1.0),
-        text=f"{money(year_sales)} / {money(annual_goal)} ({year_pct * 100:,.0f}%)".replace("$", "\\$"),
-    )
+    with st.container(key="annual_goal_progress"):
+        st.markdown(f"### {current_year} Year to Date")
+        st.progress(
+            min(max(year_pct, 0.0), 1.0),
+            text=f"{money(year_sales)} / {money(annual_goal)} ({year_pct * 100:,.0f}%)".replace("$", "\\$"),
+        )
 
 
 def render_target_chart(df_scope: pd.DataFrame, *, show_all: bool = False):
